@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Labour Intelligence{% endblock %}
+{% block page_title %}Labour Cost Intelligence{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Labour Intelligence</h2><p>Evidence base for negotiating labour rates</p></div>
+</div>
+<div class="card">
+  <div class="card-title">Benchmarks by Activity Type</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Activity</th><th class="text-right">Sessions</th><th class="text-right">Avg Cost/Session</th><th class="text-right">Min</th><th class="text-right">Max</th><th class="text-right">Cost/Labourer</th></tr></thead>
+    <tbody>
+    {% for b in benchmarks %}
+    {% if b['count'] > 0 %}
+    <tr>
+      <td><span class="badge {% if b['activity']=='Harvesting' %}badge-green{% elif b['activity']=='Pruning' %}badge-gold{% else %}badge-grey{% endif %}">{{ b['activity'] }}</span></td>
+      <td class="text-right mono">{{ b['count'] }}</td>
+      <td class="text-right mono bold">GHS {{ '{:,.2f}'.format(b['avg_cost']) }}</td>
+      <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(b['min_cost']) }}</td>
+      <td class="text-right mono negative">GHS {{ '{:,.2f}'.format(b['max_cost']) }}</td>
+      <td class="text-right mono">GHS {{ '{:,.2f}'.format(b['cost_per_labourer']) }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="alert alert-green mt-2">💡 Use these benchmarks when negotiating with labourers — you can show them the historical average cost per session for each activity type.</div>
+</div>
+
+<div class="card">
+  <div class="card-title">Highest Labour Cost Activities (All Time)</div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Farm</th><th>Activity</th><th class="text-right">Workers</th><th class="text-right">Labour Cost (GHS)</th></tr></thead>
+    <tbody>{% for r in recent %}
+    <tr>
+      <td>{{ r['date'] }}</td><td>{{ r['farm_name'] }}</td>
+      <td><span class="badge badge-grey">{{ r['activity_type'] }}</span></td>
+      <td class="text-right mono">{{ r['num_labourers'] or '—' }}</td>
+      <td class="text-right mono bold negative">{{ '{:,.2f}'.format(r['labour_cost']) }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endblock %}

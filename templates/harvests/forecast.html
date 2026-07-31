@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Harvest Forecast{% endblock %}
+{% block page_title %}Harvest Forecast{% endblock %}
+{% block content %}
+<div class="page-header"><h2>Harvest Forecast</h2><p>Projections based on historical harvest patterns (last 12 months)</p></div>
+{% for fc in forecasts %}
+<div class="card">
+  <div class="flex justify-between items-center mb-2">
+    <strong style="font-size:1rem;">{{ fc['farm']['name'] }}</strong>
+    <span class="badge badge-green">Avg: {{ fc['average'] }} bunches/month</span>
+  </div>
+  {% if fc['projected'] %}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+    {% for p in fc['projected'] %}
+    <div style="background:var(--green-pale);border-radius:8px;padding:14px;text-align:center;">
+      <div class="small muted">{{ p['month'] }}</div>
+      <div style="font-size:1.3rem;font-weight:bold;color:var(--green-dark);">{{ p['bunches'] }}</div>
+      <div class="small muted">bunches (projected)</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="alert alert-amber">Not enough historical data to forecast. Log at least 2 harvests to generate projections.</div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

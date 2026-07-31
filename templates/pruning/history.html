@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Pruning History{% endblock %}
+{% block page_title %}Pruning History{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>{{ farm['name'] }} — Pruning History</h2></div>
+  <a href="{{ url_for('pruning.index') }}" class="btn btn-outline">← Back</a>
+</div>
+{% for cd in cycle_data %}
+<div class="card">
+  <div class="flex justify-between mb-2">
+    <strong>Cycle started {{ cd['cycle']['cycle_start_date'] }}</strong>
+    {% if cd['cycle']['is_complete'] %}
+      <span class="badge badge-green">Complete — Next due {{ cd['cycle']['next_due_date'] }}</span>
+    {% else %}
+      <span class="badge badge-amber">In Progress</span>
+    {% endif %}
+  </div>
+  <table><thead><tr><th>Date</th><th class="text-right">Trees Pruned</th><th class="text-center">Workers</th><th class="text-right">Cost (GHS)</th><th>Notes</th></tr></thead>
+  <tbody>{% for b in cd['batches'] %}<tr>
+    <td>{{ b['date'] }}</td>
+    <td class="text-right mono">{{ b['trees_pruned'] }}</td>
+    <td class="text-center">{{ b['num_labourers'] }}</td>
+    <td class="text-right mono">{{ '{:,.2f}'.format(b['cost']) }}</td>
+    <td class="small muted">{{ b['notes'] or '—' }}</td>
+  </tr>{% endfor %}
+  <tr style="background:var(--grey-light);">
+    <td class="bold">Total</td>
+    <td class="text-right mono bold">{{ cd['cycle']['total_trees_pruned'] }}</td>
+    <td></td>
+    <td class="text-right mono bold">GHS {{ '{:,.2f}'.format(cd['batches']|sum(attribute='cost')) }}</td>
+    <td></td>
+  </tr>
+  </tbody></table>
+</div>
+{% else %}
+<div class="alert alert-amber">No pruning history for this farm yet.</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Record Expense{% endblock %}
+{% block page_title %}Record Farm Expense{% endblock %}
+{% block content %}
+<div class="card" style="max-width:700px;">
+<form method="POST">
+  <div class="form-grid">
+    <div class="form-group"><label>Farm</label>
+      <select name="farm_id" required>{% for f in farms %}<option value="{{ f['id'] }}">{{ f['name'] }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Date</label><input type="date" name="date" required></div>
+    <div class="form-group"><label>Category</label>
+      <select name="category">{% for c in categories %}<option>{{ c }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Amount (GHS)</label><input type="number" step="0.01" name="amount" required></div>
+    <div class="form-group full"><label>Description</label><textarea name="description"></textarea></div>
+    <div class="form-group full"><label>Notes</label><textarea name="notes"></textarea></div>
+  </div>
+  <div class="flex gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Save Expense</button>
+    <a href="{{ url_for('finances.expenses') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Run {{ run['date'] }}{% endblock %}
+{% block page_title %}Processing Run — {{ run['date'] }}{% endblock %}
+{% block content %}
+<div class="page-header"><div><h2>Processing Run</h2><p>{{ run['date'] }}</p></div><a href="{{ url_for('plant.index') }}" class="btn btn-outline">← Back</a></div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-label">Output</div><div class="stat-value">{{ '{:,.0f}'.format(run['total_output_litres']) }}L</div><div class="stat-sub">{{ '{:,.2f}'.format(run['total_output_gallons']) }} gallons</div></div>
+  <div class="stat-card"><div class="stat-label">Gross Revenue</div><div class="stat-value positive">GHS {{ '{:,.2f}'.format(run['gross_revenue']) }}</div></div>
+  <div class="stat-card red"><div class="stat-label">Electricity</div><div class="stat-value negative">GHS {{ '{:,.2f}'.format(run['electricity_cost']) }}</div></div>
+  <div class="stat-card gold"><div class="stat-label">Company (70%)</div><div class="stat-value positive">GHS {{ '{:,.2f}'.format(run['company_revenue']) }}</div></div>
+  <div class="stat-card"><div class="stat-label">Operator Pay (30%)</div><div class="stat-value">GHS {{ '{:,.2f}'.format(run['operator_pay']) }}</div></div>
+</div>
+{% if contributing %}
+<div class="card"><div class="card-title">Contributing Farms</div>
+<table><thead><tr><th>Farm</th><th class="text-right">Bunches</th></tr></thead>
+<tbody>{% for c in contributing %}<tr><td>{{ c['farm_name'] }}</td><td class="text-right mono">{{ c['bunches_contributed'] }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endif %}
+{% if run['notes'] %}<div class="card"><div class="card-title">Notes</div><p>{{ run['notes'] }}</p></div>{% endif %}
+{% endblock %}

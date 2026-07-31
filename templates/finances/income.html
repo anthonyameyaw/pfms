@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Income Records{% endblock %}
+{% block page_title %}Farm Income{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Farm Income</h2><div class="stat-value positive" style="font-size:1.3rem;">GHS {{ '{:,.2f}'.format(total) }}</div></div>
+  <a href="{{ url_for('finances.add_income') }}" class="btn btn-primary">+ Record Income</a>
+</div>
+<div class="card"><div class="table-wrap"><table>
+  <thead><tr><th>Date</th><th>Farm</th><th>Type</th><th>Buyer</th><th class="text-right">Qty</th><th class="text-right">Unit Price</th><th class="text-right">Total (GHS)</th></tr></thead>
+  <tbody>
+  {% for r in income_records %}
+  <tr>
+    <td>{{ r['date'] }}</td><td>{{ r['farm_name'] }}</td>
+    <td><span class="badge badge-green">{{ r['income_type'] }}</span></td>
+    <td>{{ r['buyer'] or '—' }}</td>
+    <td class="text-right mono">{{ r['quantity'] or '—' }}</td>
+    <td class="text-right mono">{{ '{:,.2f}'.format(r['unit_price']) if r['unit_price'] else '—' }}</td>
+    <td class="text-right mono bold positive">{{ '{:,.2f}'.format(r['total_amount']) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="7" class="text-center muted" style="padding:32px;">No income records.</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

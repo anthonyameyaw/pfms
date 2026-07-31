@@ -1,0 +1,197 @@
+/* ═══════════════════════════════════════════════════
+   PFMS Mobile Styles
+   Applied when screen width < 768px
+═══════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ── Layout ──────────────────────────────────── */
+  :root { --sidebar-w: 0px; }
+
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 200;
+    width: 280px !important;
+    box-shadow: 4px 0 40px rgba(0,0,0,0.4);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 199;
+    backdrop-filter: blur(2px);
+  }
+  .sidebar-overlay.show { display: block; }
+
+  .main { margin-left: 0 !important; }
+  body.sb-collapsed .main { margin-left: 0 !important; }
+
+  /* ── Topbar ──────────────────────────────────── */
+  .topbar {
+    padding: 0 16px;
+    height: 56px;
+  }
+  .topbar h2 { font-size: 1.2rem; }
+
+  .sb-toggle {
+    display: none; /* replaced by hamburger */
+  }
+
+  .mobile-menu-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.3rem;
+    padding: 8px;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+  }
+
+  /* Hide search shortcut hint on mobile */
+  .search-shortcut { display: none; }
+  .search-box input { width: 120px; }
+
+  /* Hide clock on small screens */
+  #liveClock { display: none; }
+
+  /* ── Page content ────────────────────────────── */
+  .page-content { padding: 16px; }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .page-header h2 { font-size: 1.6rem; }
+  .page-header > div:last-child { width: 100%; }
+  .page-header .btn { width: 100%; justify-content: center; }
+
+  /* ── Stat grid ───────────────────────────────── */
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 1.35rem; }
+
+  /* ── Cards ───────────────────────────────────── */
+  .card { padding: 16px; margin-bottom: 14px; border-radius: 12px; }
+
+  /* ── Tables — scroll horizontally ───────────── */
+  .table-wrap { border-radius: 8px; -webkit-overflow-scrolling: touch; }
+  table { font-size: 0.78rem; min-width: 600px; }
+  thead th { padding: 8px 10px; }
+  tbody td  { padding: 9px 10px; }
+
+  /* ── Forms ───────────────────────────────────── */
+  .form-grid { grid-template-columns: 1fr; gap: 14px; }
+  .filter-bar { flex-direction: column; gap: 10px; }
+  .filter-bar .form-group { min-width: 0; width: 100%; }
+
+  /* ── Buttons ─────────────────────────────────── */
+  .btn { padding: 10px 18px; font-size: 0.84rem; }
+  .btn-sm { padding: 7px 13px; font-size: 0.76rem; }
+
+  /* ── Charts ──────────────────────────────────── */
+  .chart-container { height: 200px !important; }
+
+  /* ── KPI tiles ───────────────────────────────── */
+  .kpi-tile { padding: 14px; }
+  .kpi-tile-value { font-size: 1.3rem; }
+
+  /* ── Mom boxes ───────────────────────────────── */
+  .mom-value { font-size: 1.2rem; }
+  .mom-box   { padding: 14px; }
+
+  /* ── Grid layouts in templates ───────────────── */
+  [style*="grid-template-columns"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  /* ── Heatmap — scrollable ────────────────────── */
+  #heatmapContainer { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .heatmap-grid { gap: 2px; }
+  .heatmap-cell { min-width: 10px; min-height: 10px; }
+
+  /* ── Farm of month card ──────────────────────── */
+  .fotm-stats { flex-direction: column; gap: 12px; }
+
+  /* ── Bottom nav bar ──────────────────────────── */
+  .mobile-bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: white;
+    border-top: 1px solid var(--border);
+    display: flex;
+    z-index: 150;
+    box-shadow: 0 -4px 20px rgba(26,60,46,0.08);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 4px 6px;
+    text-decoration: none;
+    color: var(--ink-soft);
+    font-size: 0.6rem;
+    font-weight: 500;
+    gap: 3px;
+    transition: color 0.15s;
+  }
+  .mobile-nav-item .nav-icon { font-size: 1.3rem; line-height: 1; }
+  .mobile-nav-item.active { color: var(--green-mid); }
+  .mobile-nav-item:hover  { color: var(--green-mid); }
+
+  /* Space for bottom nav */
+  .page-content { padding-bottom: 80px; }
+
+  /* ── Floating action button ──────────────────── */
+  .mobile-fab {
+    position: fixed;
+    bottom: 76px;
+    right: 20px;
+    width: 54px; height: 54px;
+    background: var(--green-mid);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(45,106,79,0.4);
+    cursor: pointer;
+    z-index: 140;
+    text-decoration: none;
+    transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .mobile-fab:hover { transform: scale(1.1); }
+  .mobile-fab:active { transform: scale(0.95); }
+}
+
+/* ── Extra small phones ──────────────────────── */
+@media (max-width: 390px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .topbar h2 { font-size: 1.05rem; }
+}
+
+/* ── PWA standalone mode tweaks ──────────────── */
+@media (display-mode: standalone) {
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    height: calc(56px + env(safe-area-inset-top));
+  }
+  .sidebar {
+    padding-top: env(safe-area-inset-top);
+  }
+}

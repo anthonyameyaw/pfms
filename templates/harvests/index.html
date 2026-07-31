@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}Harvests{% endblock %}
+{% block page_title %}Harvest Records{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Harvest Log</h2><p>Husks harvested per farm, with oil production and income</p></div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('harvests.forecast') }}" class="btn btn-gold">📊 Forecast</a>
+    <a href="{{ url_for('harvests.add') }}" class="btn btn-primary">+ Log Harvest</a>
+  </div>
+</div>
+
+<!-- Farm totals summary -->
+{% if farm_totals %}
+<div class="stat-grid">
+  {% for ft in farm_totals %}
+  {% if ft['total_bunches'] > 0 %}
+  <div class="stat-card">
+    <div class="stat-label">{{ ft['name'] }}</div>
+    <div class="stat-value serif">{{ '{:,}'.format(ft['total_bunches']|int) }}</div>
+    <div class="stat-sub">bunches total{% if ft['total_income'] > 0 %} · GHS {{ '{:,.2f}'.format(ft['total_income']) }} income{% endif %}</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="filter-bar">
+  <form method="GET" class="flex gap-2 items-center" style="flex-wrap:wrap;width:100%;">
+    <div class="form-group"><label>Farm</label>
+      <select name="farm_id"><option value="">All Farms</option>
+      {% for f in farms %}<option value="{{ f['id'] }}" {% if filters.farm_id==f['id']|string %}selected{% endif %}>{{ f['name'] }}</option>{% endfor %}
+      </select></div>
+    <div class="form-group"><label>From</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+    <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+    <div class="form-group" style="justify-content:flex-end;"><label>&nbsp;</label>
+      <button type="submit" class="btn btn-primary">Filter</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>Farm</th>
+          <th class="text-right">Bunches</th>
+          <th class="text-right">Harvester Pay</th>
+          <th class="text-right">Collector Pay</th>
+          <th class="text-right">Gallons</th>
+          <th class="text-right">Price/Gal</th>
+          <th class="text-right">Oil Income</th>
+          <th>Transport</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in harvests %}
+      <tr>
+        <td>{{ h['date'] }}</td>
+        <td style="font-weight:500;">{{ h['farm_name'] }}</td>
+        <td class="text-right mono bold">{{ h['bunches_harvested'] }}</td>
+        <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['harvester_pay'] or 0) }}</td>
+        <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['collector_pay'] or 0) }}</td>
+        <td class="text-right mono">{{ '{:,.1f}'.format(h['gallons_produced'] or 0) }}</td>
+        <td class="text-right mono">{% if h['price_per_gallon'] %}GHS {{ '{:,.2f}'.format(h['price_per_gallon']) }}{% else %}—{% endif %}</td>
+        <td class="text-right positive">{% if h['oil_income'] and h['oil_income'] > 0 %}GHS {{ '{:,.2f}'.format(h['oil_income']) }}{% else %}—{% endif %}</td>
+        <td class="small muted">{{ h['transport_mode'] or '—' }}</td>
+        <td>
+          <div class="flex gap-2">
+            <a href="{{ url_for('harvests.edit', harvest_id=h['id']) }}" class="btn btn-sm btn-outline">Edit</a>
+            <form method="POST" action="{{ url_for('harvests.delete', harvest_id=h['id']) }}" data-confirm="Delete this harvest record?">
+              <button class="btn btn-sm btn-danger">Del</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" class="text-center muted" style="padding:40px;">No harvest records yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}Edit Harvest{% endblock %}
+{% block page_title %}Edit Harvest{% endblock %}
+{% block content %}
+<div class="page-header"><h2>Edit Harvest Record</h2></div>
+<form method="POST">
+  <div class="card">
+    <div class="card-title">Basic Info</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Farm</label>
+        <select name="farm_id" id="farmSelect" onchange="updateTransport()">
+          {% for f in farms %}<option value="{{ f['id'] }}" {% if f['id']==harvest['farm_id'] %}selected{% endif %}>{{ f['name'] }}</option>{% endfor %}
+        </select></div>
+      <div class="form-group"><label>Date</label><input type="date" name="date" value="{{ harvest['date'] }}" required></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🌾 Husks & Labour</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Bunches Harvested</label>
+        <input type="number" name="bunches_harvested" id="bunches" value="{{ harvest['bunches_harvested'] }}" oninput="calcHarvesterPay()"></div>
+      <div class="form-group"><label>Harvester Pay (GHS)</label>
+        <input type="number" step="0.01" name="harvester_pay" id="harvesterPay" value="{{ harvest['harvester_pay'] or '' }}" oninput="updateTotalLabour()"></div>
+      <div class="form-group"><label>Number of Collectors</label>
+        <input type="number" name="num_collectors" value="{{ harvest['num_collectors'] or '' }}"></div>
+      <div class="form-group"><label>Collectors Pay (GHS)</label>
+        <input type="number" step="0.01" name="collector_pay" id="collectorPay" value="{{ harvest['collector_pay'] or '' }}" oninput="updateTotalLabour()"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🛢 Palm Oil Production & Income</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Gallons Produced</label>
+        <input type="number" step="0.1" name="gallons_produced" id="gallons" value="{{ harvest['gallons_produced'] or '' }}" oninput="calcIncome()" step="0.01"></div>
+      <div class="form-group"><label>Price per Gallon (GHS)</label>
+        <input type="number" step="0.01" name="price_per_gallon" id="pricePerGallon" value="{{ harvest['price_per_gallon'] or '' }}" oninput="calcIncome()"></div>
+      <div class="form-group"><label>Oil Income (Auto)</label>
+        <input type="number" id="oilIncome" disabled style="background:var(--surface-2);color:var(--green);font-weight:600;" value="{{ '{:.2f}'.format(harvest['oil_income'] or 0) }}"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🚛 Transport</div>
+    <div class="form-grid">
+      <div class="form-group"><label>Transport Mode</label>
+        <select name="transport_mode" id="transportMode" onchange="updateTransportFields()">
+          <option value="Tricycle" {% if harvest['transport_mode']=='Tricycle' %}selected{% endif %}>Tricycle (Aboboyaa)</option>
+          <option value="Pickup" {% if harvest['transport_mode']=='Pickup' %}selected{% endif %}>Pickup Truck</option>
+          <option value="" {% if not harvest['transport_mode'] %}selected{% endif %}>None</option>
+        </select></div>
+      <div class="form-group" id="driverPayGroup"><label>Driver Pay (GHS)</label>
+        <input type="number" step="0.01" name="driver_pay" value="{{ harvest['driver_pay'] or '' }}"></div>
+      <div class="form-group" id="fuelGroup"><label>Fuel (GHS)</label>
+        <input type="number" step="0.01" name="fuel_cost" value="{{ harvest['fuel_cost'] or '' }}"></div>
+      <div class="form-group" id="tricycleGroup"><label>Tricycle Rent (GHS)</label>
+        <input type="number" step="0.01" name="tricycle_rent" value="{{ harvest['tricycle_rent'] or '' }}"></div>
+    </div>
+  </div>
+  <div class="form-group full" style="max-width:600px;"><label>Notes</label><textarea name="notes">{{ harvest['notes'] }}</textarea></div>
+  <div class="flex gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Update Harvest</button>
+    <a href="{{ url_for('harvests.index') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+const PICKUP_FARM_ID = {{ pickup_farm_id }};
+function updateTransport() {
+  const fid = parseInt(document.getElementById('farmSelect').value);
+  document.getElementById('transportMode').value = fid===PICKUP_FARM_ID ? 'Pickup' : 'Tricycle';
+  updateTransportFields();
+}
+function updateTransportFields() {
+  const mode = document.getElementById('transportMode').value;
+  document.getElementById('driverPayGroup').style.display = mode==='Pickup'   ? '' : 'none';
+  document.getElementById('fuelGroup').style.display      = mode==='Pickup'   ? '' : 'none';
+  document.getElementById('tricycleGroup').style.display  = mode==='Tricycle' ? '' : 'none';
+}
+function calcHarvesterPay() {
+  const b = parseInt(document.getElementById('bunches').value)||0;
+  document.getElementById('harvesterPay').value = (b*3).toFixed(2);
+  updateTotalLabour();
+}
+function updateTotalLabour() {}
+function calcIncome() {
+  const g=parseFloat(document.getElementById('gallons').value)||0;
+  const p=parseFloat(document.getElementById('pricePerGallon').value)||0;
+  document.getElementById('oilIncome').value=(g*p).toFixed(2);
+}
+document.getElementById('collectorPay').addEventListener('input', updateTotalLabour);
+updateTransportFields();
+</script>
+{% endblock %}

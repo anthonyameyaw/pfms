@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+{% block title %}Edit Activity{% endblock %}
+{% block page_title %}Edit Activity{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Edit Activity</h2>
+    <p>All sections are editable. Change the activity type to reveal different fields.</p>
+  </div>
+</div>
+
+{% set harvest = namespace(data=None) %}
+{% set h = linked_harvest %}
+
+<form method="POST" id="activityForm">
+<div class="card">
+  <div class="card-title">📋 Basic Information</div>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Farm</label>
+      <select name="farm_id" id="farmSelect" required onchange="onFarmChange()">
+        {% for f in farms %}
+        <option value="{{ f['id'] }}"
+          {% if f['id'] == activity['farm_id'] %}selected{% endif %}>
+          {{ f['name'] }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Date</label>
+      <input type="date" name="date" value="{{ activity['date'] }}" required>
+    </div>
+    <div class="form-group">
+      <label>Activity Type</label>
+      <select name="activity_type" id="activityType" required onchange="onActivityChange()">
+        {% for t in activity_types %}
+        <option value="{{ t }}" {% if t == activity['activity_type'] %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" id="labourersGroup">
+      <label>Number of Labourers</label>
+      <input type="number" name="num_labourers" id="numLabourers"
+             value="{{ activity['num_labourers'] or '' }}" min="0">
+    </div>
+  </div>
+</div>
+
+<!-- ══ STANDARD FIELDS ══════════════════════════════════════════════════ -->
+<div id="standardSection" class="card">
+  <div class="card-title">💰 Cost Details</div>
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Labour Cost (GHS)</label>
+      <input type="number" step="0.01" name="labour_cost" id="standardLabourCost"
+             value="{{ activity['labour_cost'] or '' }}" min="0">
+    </div>
+    <div class="form-group">
+      <label>Materials Used</label>
+      <input name="materials_used" value="{{ activity['materials_used'] or '' }}"
+             placeholder="e.g. Fertiliser 2 bags">
+    </div>
+    <div class="form-group">
+      <label>Materials Cost (GHS)</label>
+      <input type="number" step="0.01" name="materials_cost"
+             value="{{ activity['materials_cost'] or '' }}" min="0">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input name="description" value="{{ activity['description'] or '' }}"
+             placeholder="What was done...">
+    </div>
+  </div>
+</div>
+
+<!-- ══ HARVESTING SECTION ═══════════════════════════════════════════════ -->
+<div id="harvestSection" style="display:none;">
+
+  <div class="card">
+    <div class="card-title">🌾 Husks Harvested</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Number of Husks (Bunches) Harvested</label>
+        <input type="number" name="bunches_harvested" id="bunches" min="0"
+               oninput="calcHarvesterPay()" placeholder="e.g. 200"
+               value="{{ h['bunches_harvested'] if h else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👷 Labour Breakdown</div>
+    <div class="alert alert-green" style="margin-bottom:16px;">
+      <span>ℹ️</span>
+      <div>Harvester pay is <strong>GHS 3 per bunch</strong> — auto-calculated. Collectors carry and load the husks.</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Harvester Pay (GHS) — GHS 3 × bunches</label>
+        <input type="number" step="0.01" name="harvester_pay" id="harvesterPay"
+               oninput="updateTotalLabour()" placeholder="Auto-calculated"
+               value="{{ '{:.2f}'.format(h['harvester_pay']) if h and h['harvester_pay'] else '' }}">
+        <span class="small muted" id="harvesterNote" style="margin-top:4px;display:block;"></span>
+      </div>
+      <div class="form-group">
+        <label>Number of Collectors (Labourers)</label>
+        <input type="number" name="num_collectors" id="numCollectors" min="0"
+               oninput="syncLabourers()"
+               value="{{ h['num_collectors'] if h and h['num_collectors'] else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Total Collectors Pay (GHS)</label>
+        <input type="number" step="0.01" name="collector_pay" id="collectorPay"
+               oninput="updateTotalLabour()"
+               value="{{ '{:.2f}'.format(h['collector_pay']) if h and h['collector_pay'] else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Total Labour Cost (Auto)</label>
+        <input type="number" id="totalLabourDisplay" disabled
+               style="background:var(--surface-2);color:var(--green);font-weight:600;">
+        <input type="hidden" name="labour_cost" id="totalLabourHidden">
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Husks processed? -->
+  <div class="card">
+    <div class="card-title">🛢 Step 1 — Have the husks been processed into palm oil?</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Husks Processed?</label>
+        <select name="husks_processed" id="husksProcessed" onchange="onProcessedChange()">
+          <option value="">— Select —</option>
+          <option value="1" {% if h and h['husks_processed'] == 1 %}selected{% endif %}>Yes — gallons are known</option>
+          <option value="0" {% if h and h['husks_processed'] == 0 %}selected{% endif %}>Not yet — I will update later</option>
+        </select>
+      </div>
+    </div>
+    <div id="notYetMsg" style="display:none;" class="alert alert-amber mt-2">
+      <span>⏰</span>
+      <div>This harvest will appear in the pending list on the farm dashboard.</div>
+    </div>
+  </div>
+
+  <!-- Step 2: Gallons produced -->
+  <div class="card" id="gallonsCard" style="display:none;">
+    <div class="card-title">🛢 Step 2 — How many gallons were produced?</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Gallons of Palm Oil Produced</label>
+        <input type="number" step="0.01" name="gallons_produced" id="gallons"
+               oninput="onGallonsChange()"
+               value="{{ h['gallons_produced'] if h and h['gallons_produced'] else '' }}"
+               placeholder="e.g. 40" step="0.01">
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Sold? -->
+  <div class="card" id="soldCard" style="display:none;">
+    <div class="card-title">💰 Step 3 — Have these gallons been sold?</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Gallons Sold?</label>
+        <select name="gallons_sold_yn" id="gallonsSoldYN" onchange="onSoldChange()">
+          <option value="">— Select —</option>
+          <option value="1" {% if h and h['gallons_sold'] and h['gallons_sold'] > 0 %}selected{% endif %}>Yes — sold</option>
+          <option value="0" {% if h and (not h['gallons_sold'] or h['gallons_sold'] == 0) and h['husks_processed'] == 1 %}selected{% endif %}>Not yet — in storage</option>
+        </select>
+      </div>
+    </div>
+    <div id="notSoldMsg" style="display:none;" class="alert alert-amber mt-2">
+      <span>🛢</span><div>Gallons tracked as unsold stock for this farm.</div>
+    </div>
+    <div id="soldDetails" style="display:none;">
+      <hr class="divider">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Gallons Sold</label>
+          <input type="number" step="0.01" name="gallons_sold" id="gallonsSold"
+                 oninput="calcSaleIncome()"
+                 value="{{ h['gallons_sold'] if h and h['gallons_sold'] else '' }}"
+                 placeholder="e.g. 35" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Price per Gallon (GHS)</label>
+          <input type="number" step="0.01" name="gallons_sold_price" id="gallonsSoldPrice"
+                 oninput="calcSaleIncome()"
+                 value="{{ h['gallons_sold_price'] if h and h['gallons_sold_price'] else '' }}"
+                 placeholder="e.g. 40">
+        </div>
+        <div class="form-group">
+          <label>Sale Income (Auto)</label>
+          <input type="number" id="saleIncomeDisplay" disabled
+                 style="background:var(--surface-2);color:var(--green);font-weight:600;"
+                 value="{{ '{:.2f}'.format(h['gallons_sold_income']) if h and h['gallons_sold_income'] else '' }}">
+          <input type="hidden" name="gallons_sold_income" id="gallonsSoldIncomeHidden"
+                 value="{{ h['gallons_sold_income'] if h and h['gallons_sold_income'] else 0 }}">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🚛 Transport</div>
+    <div class="alert alert-amber" id="transportAlert" style="margin-bottom:16px;">
+      <span>🚛</span>
+      <div id="transportAlertText">Transport mode set by farm.</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Transport Mode</label>
+        <select name="transport_mode" id="transportMode" onchange="updateTransportFields()">
+          <option value="Tricycle" {% if linked_transport and linked_transport['transport_type']=='Tricycle' %}selected{% elif h and h['transport_mode']=='Tricycle' %}selected{% endif %}>Tricycle (Aboboyaa)</option>
+          <option value="Pickup"   {% if linked_transport and linked_transport['transport_type']=='Pickup' %}selected{% elif h and h['transport_mode']=='Pickup' %}selected{% endif %}>Pickup Truck</option>
+          <option value=""         {% if not linked_transport and (not h or not h['transport_mode']) %}selected{% endif %}>None</option>
+        </select>
+      </div>
+      <div class="form-group" id="driverPayGroup">
+        <label>Driver Pay (GHS)</label>
+        <input type="number" step="0.01" name="driver_pay" placeholder="e.g. 80"
+               value="{{ linked_transport['driver_pay'] if linked_transport and linked_transport['driver_pay'] else '' }}">
+      </div>
+      <div class="form-group" id="fuelGroup">
+        <label>Fuel Expense (GHS)</label>
+        <input type="number" step="0.01" name="fuel_cost" placeholder="e.g. 120"
+               value="{{ linked_transport['fuel_cost'] if linked_transport and linked_transport['fuel_cost'] else '' }}">
+      </div>
+      <div class="form-group" id="tricycleGroup">
+        <label>Tricycle Rental Fee (GHS)</label>
+        <input type="number" step="0.01" name="tricycle_rent" placeholder="e.g. 50"
+               value="{{ linked_transport['rental_cost'] if linked_transport and linked_transport['rental_cost'] else '' }}">
+      </div>
+    </div>
+  </div>
+
+</div>
+<!-- ══ END HARVESTING SECTION ═══════════════════════════════════════════ -->
+
+<div class="card">
+  <div class="card-title">📝 Notes</div>
+  <div class="form-group">
+    <textarea name="notes" placeholder="Any additional notes...">{{ activity['notes'] or '' }}</textarea>
+  </div>
+</div>
+
+<div class="flex gap-2">
+  <button type="submit" class="btn btn-primary" id="submitBtn">💾 Update Activity</button>
+  <a href="{{ url_for('activities.index') }}" class="btn btn-outline">Cancel</a>
+</div>
+
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PICKUP_FARM_ID = {{ pickup_farm_id }};
+const FARM_NAMES = {
+  {% for f in farms %}{{ f['id'] }}: "{{ f['name'] }}",{% endfor %}
+};
+const IS_HARVEST = {{ 'true' if activity['activity_type'] == 'Harvesting' else 'false' }};
+
+function onActivityChange() {
+  const type      = document.getElementById('activityType').value;
+  const isHarvest = type === 'Harvesting';
+  document.getElementById('standardSection').style.display = isHarvest ? 'none' : '';
+  document.getElementById('harvestSection').style.display  = isHarvest ? ''     : 'none';
+  document.getElementById('submitBtn').textContent = isHarvest
+    ? '💾 Update Harvest Activity' : '💾 Update Activity';
+  if (isHarvest) {
+    onFarmChange();
+    updateTotalLabour();
+    calcIncome();
+  }
+}
+
+function onFarmChange() {
+  const fid  = parseInt(document.getElementById('farmSelect').value);
+  const mode = (fid === PICKUP_FARM_ID) ? 'Pickup' : 'Tricycle';
+  // Only auto-switch if there's no existing saved mode
+  if (!IS_HARVEST) return;
+  const sel = document.getElementById('transportMode');
+  if (!sel.dataset.userChanged) sel.value = mode;
+  const alertText = document.getElementById('transportAlertText');
+  const name      = FARM_NAMES[fid] || 'This farm';
+  alertText.innerHTML = fid === PICKUP_FARM_ID
+    ? `<strong>${name}</strong> uses the <strong>Pickup Truck</strong>. Enter driver pay and fuel below.`
+    : `<strong>${name}</strong> uses the <strong>Tricycle (Aboboyaa)</strong>. Enter the rental fee below.`;
+  updateTransportFields();
+}
+
+function updateTransportFields() {
+  document.getElementById('transportMode').dataset.userChanged = true;
+  const mode = document.getElementById('transportMode').value;
+  document.getElementById('driverPayGroup').style.display  = mode === 'Pickup'   ? '' : 'none';
+  document.getElementById('fuelGroup').style.display       = mode === 'Pickup'   ? '' : 'none';
+  document.getElementById('tricycleGroup').style.display   = mode === 'Tricycle' ? '' : 'none';
+}
+
+function calcHarvesterPay() {
+  const bunches = parseInt(document.getElementById('bunches').value) || 0;
+  const pay     = bunches * 3;
+  if (bunches > 0) {
+    document.getElementById('harvesterPay').value = pay.toFixed(2);
+    document.getElementById('harvesterNote').textContent =
+      `GHS 3 × ${bunches} bunches = GHS ${pay.toFixed(2)}`;
+  }
+  updateTotalLabour();
+}
+
+function syncLabourers() {
+  document.getElementById('numLabourers').value =
+    document.getElementById('numCollectors').value;
+}
+
+function updateTotalLabour() {
+  const h     = parseFloat(document.getElementById('harvesterPay').value) || 0;
+  const c     = parseFloat(document.getElementById('collectorPay').value) || 0;
+  const total = h + c;
+  document.getElementById('totalLabourDisplay').value = total.toFixed(2);
+  document.getElementById('totalLabourHidden').value  = total.toFixed(2);
+}
+
+function onProcessedChange() {
+  const val = document.getElementById('husksProcessed').value;
+  document.getElementById('notYetMsg').style.display  = val === '0' ? '' : 'none';
+  document.getElementById('gallonsCard').style.display = val === '1' ? '' : 'none';
+  if (val !== '1') {
+    document.getElementById('soldCard').style.display = 'none';
+  } else {
+    onGallonsChange();
+  }
+}
+function onGallonsChange() {
+  const g = parseFloat(document.getElementById('gallons').value) || 0;
+  document.getElementById('soldCard').style.display = g > 0 ? '' : 'none';
+}
+function onSoldChange() {
+  const val = document.getElementById('gallonsSoldYN').value;
+  document.getElementById('notSoldMsg').style.display  = val === '0' ? '' : 'none';
+  document.getElementById('soldDetails').style.display = val === '1' ? '' : 'none';
+}
+function calcIncome() {}
+function calcSaleIncome() {
+  const gs = parseFloat(document.getElementById('gallonsSold').value) || 0;
+  const ps = parseFloat(document.getElementById('gallonsSoldPrice').value) || 0;
+  const income = gs * ps;
+  document.getElementById('saleIncomeDisplay').value       = income.toFixed(2);
+  document.getElementById('gallonsSoldIncomeHidden').value = income.toFixed(2);
+}
+
+document.getElementById('collectorPay').addEventListener('input', updateTotalLabour);
+document.getElementById('harvesterPay').addEventListener('input', updateTotalLabour);
+
+// Initialise
+onActivityChange();
+onFarmChange();
+// Restore oil section state
+if (document.getElementById('husksProcessed')) onProcessedChange();
+if (document.getElementById('gallonsSoldYN') && document.getElementById('gallonsSoldYN').value) onSoldChange();
+</script>
+{% endblock %}

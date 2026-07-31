@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Expense Records{% endblock %}
+{% block page_title %}Farm Expenses{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Farm Expenses</h2><div class="stat-value negative" style="font-size:1.3rem;">GHS {{ '{:,.2f}'.format(total) }}</div></div>
+  <a href="{{ url_for('finances.add_expense') }}" class="btn btn-primary">+ Record Expense</a>
+</div>
+<div class="card"><div class="table-wrap"><table>
+  <thead><tr><th>Date</th><th>Farm</th><th>Category</th><th>Description</th><th class="text-right">Amount (GHS)</th></tr></thead>
+  <tbody>
+  {% for r in expense_records %}
+  <tr>
+    <td>{{ r['date'] }}</td><td>{{ r['farm_name'] }}</td>
+    <td><span class="badge badge-amber">{{ r['category'] }}</span></td>
+    <td class="small">{{ r['description'] or '—' }}</td>
+    <td class="text-right mono bold negative">{{ '{:,.2f}'.format(r['amount']) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="text-center muted" style="padding:32px;">No expense records.</td></tr>{% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

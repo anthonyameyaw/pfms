@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Edit Investor{% endblock %}
+{% block page_title %}Investors{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Edit Investor</h2><p>{{ investor['name'] }}</p></div>
+</div>
+<div class="card" style="max-width:680px;">
+  <form method="POST">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Full Name *</label>
+        <input name="name" value="{{ investor['name'] }}" required>
+      </div>
+      <div class="form-group">
+        <label>Date Joined</label>
+        <input type="date" name="date_joined" value="{{ investor['date_joined'] or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input name="phone" value="{{ investor['phone'] or '' }}">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ investor['email'] or '' }}">
+      </div>
+      <div class="form-group full">
+        <label>Location</label>
+        <input name="location" value="{{ investor['location'] or '' }}">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes">{{ investor['notes'] or '' }}</textarea>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">💾 Update Investor</button>
+      <a href="{{ url_for('investors.detail', investor_id=investor['id']) }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

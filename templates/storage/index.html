@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+{% block title %}Storage{% endblock %}
+{% block page_title %}Palm Oil Storage{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Palm Oil Storage</h2>
+    <p>Total inventory derived from gallons produced minus gallons sold, per farm.</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('storage.log_quality') }}" class="btn btn-primary">🌿 Log Fresh / Soap Split</a>
+    <a href="{{ url_for('storage.revalue') }}"     class="btn btn-gold">💱 Update Price</a>
+  </div>
+</div>
+
+<!-- Summary cards -->
+<div class="stat-grid">
+  <div class="stat-card gold">
+    <div class="stat-label">Total Gallons in Storage</div>
+    <div class="stat-value serif">{{ '{:,.2f}'.format(total_stock) }}</div>
+    <div class="stat-sub">gallons currently held</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Price per Gallon</div>
+    {% if current_price > 0 %}
+    <div class="stat-value serif">GHS {{ '{:,.2f}'.format(current_price) }}</div>
+    {% else %}
+    <div class="stat-value serif" style="font-size:1rem;color:var(--ink-soft);">Not set</div>
+    {% endif %}
+    <div class="stat-sub"><a href="{{ url_for('storage.revalue') }}" style="color:var(--gold);">Update price →</a></div>
+  </div>
+  <div class="stat-card {% if current_value > 0 %}gold{% endif %}">
+    <div class="stat-label">Total Stock Value</div>
+    <div class="stat-value {% if current_value > 0 %}positive{% else %}serif{% endif %}">
+      GHS {{ '{:,.2f}'.format(current_value) }}
+    </div>
+    <div class="stat-sub">{{ '{:,.2f}'.format(total_stock) }} gal × GHS {{ '{:,.2f}'.format(current_price) }}</div>
+  </div>
+</div>
+
+<!-- Fresh / Soap split -->
+<div class="card">
+  <div class="card-title">🌿 Oil Quality Split — Latest Assessment</div>
+  {% if fresh_total > 0 or soap_total > 0 %}
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">Fresh Oil Palm</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(fresh_total) }} gal</div>
+      <div class="kpi-tile-note">Human consumption</div>
+    </div>
+    <div class="kpi-tile warn">
+      <div class="kpi-tile-label">Unfresh Oil Palm (Soap)</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(soap_total) }} gal</div>
+      <div class="kpi-tile-note">For soap production</div>
+    </div>
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">Total Assessed</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(fresh_total + soap_total) }} gal</div>
+      <div class="kpi-tile-note">
+        {% if fresh_total + soap_total > 0 %}
+        {{ '{:.0f}'.format(fresh_total / (fresh_total + soap_total) * 100) }}% fresh
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% if quality_logs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th class="text-right">Fresh Gallons</th>
+          <th class="text-right">Soap Gallons</th>
+          <th class="text-right">Total</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for q in quality_logs %}
+        <tr>
+          <td>{{ q['date'] }}</td>
+          <td class="text-right mono positive">{{ '{:,.2f}'.format(q['fresh_gallons'] or 0) }}</td>
+          <td class="text-right mono" style="color:var(--amber);">{{ '{:,.2f}'.format(q['soap_gallons'] or 0) }}</td>
+          <td class="text-right mono bold">{{ '{:,.2f}'.format((q['fresh_gallons'] or 0) + (q['soap_gallons'] or 0)) }}</td>
+          <td class="small muted">{{ q['notes'] or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('storage.delete_transaction', tx_id=q['id']) }}"
+                  data-confirm="Delete this quality log?">
+              <button class="btn btn-sm btn-danger">Del</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% else %}
+  <div style="text-align:center;padding:28px 0;">
+    <p class="muted">No quality assessments logged yet.</p>
+    <a href="{{ url_for('storage.log_quality') }}" class="btn btn-primary" style="margin-top:12px;">+ Log Fresh / Soap Split</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Per-farm stock -->
+<div class="card">
+  <div class="card-title">🌴 Storage by Farm</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Farm</th>
+          <th>Status</th>
+          <th class="text-right">Total Produced (gal)</th>
+          <th class="text-right">Total Sold (gal)</th>
+          <th class="text-right">In Storage (gal)</th>
+          <th class="text-right">Stock Value</th>
+          <th class="text-right">Share %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in farm_stocks %}
+        <tr>
+          <td style="font-weight:500;">
+            <a href="{{ url_for('farms.detail', farm_id=f.id) }}" style="color:var(--green-mid);">{{ f.name }}</a>
+          </td>
+          <td>
+            <span class="badge {% if f.status=='Active' %}badge-green{% elif f.status=='Inactive' %}badge-red{% else %}badge-amber{% endif %}">
+              {{ f.status }}
+            </span>
+          </td>
+          <td class="text-right mono">{{ '{:,.2f}'.format(f.produced) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.sold) }}</td>
+          <td class="text-right mono bold {% if f.in_storage > 0 %}positive{% endif %}">
+            {{ '{:,.2f}'.format(f.in_storage) }}
+          </td>
+          <td class="text-right mono">
+            {% if current_price > 0 and f.in_storage > 0 %}
+            GHS {{ '{:,.2f}'.format(f.in_storage * current_price) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-right">
+            {% if f.in_storage > 0 %}
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="progress-wrap" style="flex:1;min-width:60px;">
+                <div class="progress-bar" style="width:{{ f.pct }}%;"></div>
+              </div>
+              <span class="mono small">{{ f.pct }}%</span>
+            </div>
+            {% else %}
+            <span class="muted small">0%</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr style="background:var(--surface);font-weight:600;border-top:2px solid var(--border);">
+          <td colspan="2">Total</td>
+          <td class="text-right mono">{{ '{:,.2f}'.format(farm_stocks|sum(attribute='produced')) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(farm_stocks|sum(attribute='sold')) }}</td>
+          <td class="text-right mono positive">{{ '{:,.2f}'.format(total_stock) }}</td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(current_value) }}</td>
+          <td class="text-right mono">100%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Price history chart -->
+{% if value_history %}
+<div class="card">
+  <div class="card-title">📈 Price per Gallon History</div>
+  <div class="chart-container" style="height:200px;"><canvas id="priceChart"></canvas></div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if value_history %}
+<script>
+const vh = {{ value_history | tojson }};
+new Chart(document.getElementById('priceChart'), {
+  type: 'line',
+  data: {
+    labels: vh.map(d => d.date),
+    datasets: [{
+      label: 'Price per Gallon (GHS)',
+      data: vh.map(d => d.price_per_gallon),
+      borderColor: '#c8922a',
+      backgroundColor: 'rgba(200,146,42,0.1)',
+      fill: true, tension: 0.3, pointRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { beginAtZero: false, grid: { color: '#eef4f0' },
+           ticks: { callback: v => 'GHS ' + v.toFixed(2) } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

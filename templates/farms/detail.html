@@ -1,0 +1,387 @@
+{% extends 'base.html' %}
+{% block title %}{{ farm['name'] }}{% endblock %}
+{% block page_title %}{{ farm['name'] }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>{{ farm['name'] }}</h2>
+    <p>{{ farm['location'] }}, {{ farm['constituency'] }} &nbsp;·&nbsp; {{ farm['size_acres'] }} acres &nbsp;·&nbsp; {{ farm['crop_type'] }}
+      &nbsp;&nbsp;<span class="badge {% if farm['status']=='Active' %}badge-green{% elif farm['status']=='Inactive' %}badge-red{% else %}badge-amber{% endif %}">{{ farm['status'] }}</span>
+    </p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('farms.edit', farm_id=farm['id']) }}" class="btn btn-outline">Edit Farm</a>
+    <a href="{{ url_for('activities.add') }}?farm_id={{ farm['id'] }}" class="btn btn-primary">+ Log Activity</a>
+  </div>
+</div>
+
+<!-- Summary -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">All-Time Income</div>
+    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_income) }}</div>
+    <div class="stat-sub">YTD: GHS {{ '{:,.2f}'.format(ytd_income) }}</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">All-Time Expenses</div>
+    <div class="stat-value negative">GHS {{ '{:,.2f}'.format(total_expenses) }}</div>
+    <div class="stat-sub">YTD: GHS {{ '{:,.2f}'.format(ytd_exp) }}</div>
+  </div>
+  <div class="stat-card {% if total_net >= 0 %}gold{% else %}red{% endif %}">
+    <div class="stat-label">Net Profit / Loss</div>
+    <div class="stat-value {% if total_net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(total_net) }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Bunches Harvested</div>
+    <div class="stat-value serif">{{ '{:,}'.format(total_bunches) }}</div>
+    <div class="stat-sub">All time</div>
+  </div>
+</div>
+
+<!-- Expense Breakdown -->
+<div class="card">
+  <div class="card-title">📤 Expense Breakdown</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+    <div class="mom-box">
+      <div class="small muted">Labour & Farm Costs</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(farm_exp_total) }}</div>
+      <div class="small muted">Weeding, spraying, fertilising, etc.</div>
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Harvesting Labour</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(harvest_exp_total) }}</div>
+      <div class="small muted">Harvester + collector pay</div>
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Transport Cost</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(transport_exp_total) }}</div>
+      <div class="small muted">Pickup / tricycle trips for this farm</div>
+    </div>
+  </div>
+  {% if total_expenses > 0 %}
+  <div class="mt-2">
+    <!-- Visual bar breakdown -->
+    <div class="small muted mb-1" style="margin-top:12px;">Cost share</div>
+    <div style="display:flex;border-radius:6px;overflow:hidden;height:10px;gap:2px;">
+      {% set fe_pct = (farm_exp_total / total_expenses * 100)|int %}
+      {% set he_pct = (harvest_exp_total / total_expenses * 100)|int %}
+      {% set te_pct = (transport_exp_total / total_expenses * 100)|int %}
+      <div style="width:{{ fe_pct }}%;background:var(--green-light);border-radius:4px;" title="Farm costs {{ fe_pct }}%"></div>
+      <div style="width:{{ he_pct }}%;background:var(--gold);border-radius:4px;" title="Harvest labour {{ he_pct }}%"></div>
+      <div style="width:{{ te_pct }}%;background:var(--amber);border-radius:4px;" title="Transport {{ te_pct }}%"></div>
+    </div>
+    <div class="flex gap-3 mt-1 small muted">
+      <span>🟢 Farm costs {{ fe_pct }}%</span>
+      <span>🟡 Harvest labour {{ he_pct }}%</span>
+      <span>🟠 Transport {{ te_pct }}%</span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Tree Status -->
+{% if farm['crop_type'] == 'Oil Palm' %}
+<div class="card">
+  <div class="card-title">🌴 Oil Palm Tree Status</div>
+  {% if total_trees == 0 %}
+  <div class="alert alert-amber">
+    <span>⚠️</span>
+    <div>No tree count set for this farm. <a href="{{ url_for('farms.edit', farm_id=farm['id']) }}" style="color:var(--gold-dark);font-weight:600;">Set total trees in farm profile →</a> This enables pruning progress tracking.</div>
+  </div>
+  {% else %}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;">
+    <div class="mom-box" style="border-color:var(--green-light);">
+      <div class="small muted">Total Trees</div>
+      <div class="mom-value" style="color:var(--forest-mid);">{{ '{:,}'.format(total_trees) }}</div>
+      <div class="small muted">in this farm</div>
+    </div>
+    <div class="mom-box" style="border-color:var(--gold);">
+      <div class="small muted">Pruned (This Cycle)</div>
+      <div class="mom-value" style="color:var(--gold-dark);">{{ '{:,}'.format(trees_pruned_this_cycle) }}</div>
+      <div class="small muted">current active cycle</div>
+    </div>
+    <div class="mom-box" style="border-color:{% if trees_unpruned and trees_unpruned > 0 %}var(--amber){% else %}var(--green-light){% endif %};">
+      <div class="small muted">Still to Prune</div>
+      <div class="mom-value" style="color:{% if trees_unpruned and trees_unpruned > 0 %}var(--amber){% else %}var(--green){% endif %};">
+        {{ '{:,}'.format(trees_unpruned) if trees_unpruned is not none else '—' }}
+      </div>
+      <div class="small muted">remaining this cycle</div>
+    </div>
+  </div>
+
+  {% if trees_pruned_this_cycle > 0 or total_trees > 0 %}
+  <div>
+    <div class="flex justify-between mb-1 small">
+      <span>Pruning progress — current cycle</span>
+      <span class="muted">{{ trees_pruned_this_cycle }} / {{ total_trees }} trees</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar"
+           style="width:{{ [(trees_pruned_this_cycle / total_trees * 100), 100]|min if total_trees > 0 else 0 }}%;"></div>
+    </div>
+    {% set pct = (trees_pruned_this_cycle / total_trees * 100)|int if total_trees > 0 else 0 %}
+    <div class="small muted mt-1">{{ pct }}% complete this cycle</div>
+  </div>
+  {% endif %}
+
+  {% if last_cycle %}
+  <hr class="divider">
+  <div class="small muted">Last completed cycle: ended <strong>{{ last_cycle['cycle_end_date'] }}</strong> · next due <strong>{{ last_cycle['next_due_date'] }}</strong></div>
+  {% endif %}
+
+  <div class="mt-2 flex gap-2">
+    <a href="{{ url_for('pruning.add_batch') }}?farm_id={{ farm['id'] }}" class="btn btn-outline btn-sm">✂️ Log Pruning Batch</a>
+    <a href="{{ url_for('pruning.history', farm_id=farm['id']) }}" class="btn btn-outline btn-sm">Pruning History</a>
+    <a href="{{ url_for('farms.edit', farm_id=farm['id']) }}" class="btn btn-outline btn-sm">Edit Tree Count</a>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Gallons Tracking -->
+{% if farm['crop_type'] == 'Oil Palm' %}
+<div class="card">
+  <div class="card-title">🛢 Palm Oil Gallons — Production & Storage</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:{% if pending_harvests %}16px{% else %}0{% endif %};">
+    <div class="mom-box">
+      <div class="small muted">Total Gallons Produced</div>
+      <div class="mom-value positive">{{ '{:,.1f}'.format(total_gallons_produced) }}</div>
+      <div class="small muted">from logged harvests</div>
+    </div>
+    <div class="mom-box" style="border-color:var(--gold);">
+      <div class="small muted">Gallons in Storage</div>
+      <div class="mom-value" style="color:var(--gold-dark);">{{ '{:,.1f}'.format(gallons_in_storage) }}</div>
+      <div class="small muted">attributed to this farm</div>
+    </div>
+    <div class="mom-box" style="border-color:var(--green-light);">
+      <div class="small muted">Gallons Sold</div>
+      <div class="mom-value positive">{{ '{:,.1f}'.format(total_gallons_sold) }}</div>
+      <div class="small muted">income recorded</div>
+    </div>
+  </div>
+
+  {% if pending_harvests %}
+  <div class="alert alert-amber" style="margin-top:12px;">
+    <span>⚠️</span>
+    <div>
+      <strong>{{ pending_harvests|length }} harvest{{ 's' if pending_harvests|length > 1 else '' }} missing gallons data.</strong>
+      Update these after processing to keep income accurate:
+      <ul style="margin-top:8px;padding-left:16px;">
+        {% for h in pending_harvests %}
+        <li class="small">
+          {{ h['date'] }} — {{ h['bunches_harvested'] }} bunches
+          <a href="{{ url_for('activities.index') }}?farm_id={{ farm['id'] }}&activity_type=Harvesting"
+             style="color:var(--gold-dark);font-weight:600;margin-left:8px;">Update →</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- MoM Snapshot -->
+<div class="card">
+  <div class="card-title">📅 Month-on-Month Snapshot</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+    <div class="mom-box">
+      <div class="small muted">Income</div>
+      <div class="mom-value positive">GHS {{ '{:,.2f}'.format(this_m_income) }}</div>
+      <div class="small muted">This month</div>
+      <div class="small muted mt-1">Last: GHS {{ '{:,.2f}'.format(last_m_income) }}</div>
+      {% if mom_income_chg is not none %}
+      <div class="small mt-1 {% if mom_income_chg >= 0 %}positive{% else %}negative{% endif %}">
+        {% if mom_income_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_income_chg|abs }}% vs last month
+      </div>
+      {% endif %}
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Expenses</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(this_m_exp) }}</div>
+      <div class="small muted">This month</div>
+      <div class="small muted mt-1">Last: GHS {{ '{:,.2f}'.format(last_m_exp) }}</div>
+      {% if mom_exp_chg is not none %}
+      <div class="small mt-1 {% if mom_exp_chg <= 0 %}positive{% else %}negative{% endif %}">
+        {% if mom_exp_chg > 0 %}▲{% else %}▼{% endif %} {{ mom_exp_chg|abs }}% vs last month
+      </div>
+      {% endif %}
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Net Profit</div>
+      <div class="mom-value {% if this_m_net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(this_m_net) }}</div>
+      <div class="small muted">This month</div>
+      {% if mom_net_chg is not none %}
+      <div class="small mt-1 {% if mom_net_chg >= 0 %}positive{% else %}negative{% endif %}">
+        {% if mom_net_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_net_chg|abs }}% vs last month
+      </div>
+      {% endif %}
+      {% if yoy_income_chg is not none %}
+      <div class="small muted mt-1">YoY income: {% if yoy_income_chg >= 0 %}+{% endif %}{{ yoy_income_chg }}%</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- KPIs -->
+{% if kpis %}
+<div class="card">
+  <div class="card-title">📊 Financial Health KPIs</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;">
+    {% for kpi in kpis %}
+    <div class="kpi-tile {{ kpi.status }}">
+      <div class="kpi-tile-label">{{ kpi.label }}</div>
+      <div class="kpi-tile-value">{{ kpi.value }}</div>
+      <div class="kpi-tile-note">{{ kpi.note }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Recommended Actions -->
+{% if actions %}
+<div class="card">
+  <div class="card-title">💡 Recommended Actions</div>
+  {% for act in actions %}
+  <div class="alert {% if act.priority=='high' %}alert-red{% elif act.priority=='medium' %}alert-amber{% else %}alert-green{% endif %}">
+    <span>{% if act.priority=='high' %}🔴{% elif act.priority=='medium' %}🟡{% else %}✅{% endif %}</span>
+    <div>{{ act.action }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Charts -->
+{% if monthly_chart %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+  <div class="card">
+    <div class="card-title">📈 Monthly Income vs Expenses</div>
+    <div class="chart-container"><canvas id="incExpChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📉 Monthly Net Profit Trend</div>
+    <div class="chart-container"><canvas id="netChart"></canvas></div>
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px;margin-bottom:20px;">
+  <div class="card">
+    <div class="card-title">🌾 Monthly Bunches Harvested</div>
+    <div class="chart-container"><canvas id="harvestChart"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📤 Expenses by Category</div>
+    <div class="chart-container"><canvas id="expCatChart"></canvas></div>
+  </div>
+</div>
+{% endif %}
+
+
+
+<!-- Recent Tables -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+  <div class="card">
+    <div class="card-title">Recent Activities</div>
+    {% if activities %}
+    <table><thead><tr><th>Date</th><th>Type</th><th class="text-right">Cost</th></tr></thead>
+    <tbody>{% for a in activities %}<tr>
+      <td>{{ a['date'] }}</td>
+      <td><span class="badge badge-grey">{{ a['activity_type'] }}</span></td>
+      <td class="text-right mono">GHS {{ '{:,.2f}'.format(a['total_cost']) }}</td>
+    </tr>{% endfor %}</tbody></table>
+    {% else %}<p class="muted">No activities yet.</p>{% endif %}
+    <div class="mt-2 flex gap-2">
+      <a href="{{ url_for('activities.index') }}?farm_id={{ farm['id'] }}" class="btn btn-outline btn-sm">All</a>
+      <a href="{{ url_for('activities.add') }}?farm_id={{ farm['id'] }}" class="btn btn-primary btn-sm">+ Log</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Recent Harvests</div>
+    {% if harvests %}
+    <table><thead><tr><th>Date</th><th class="text-right">Bunches</th><th class="text-right">Cost</th></tr></thead>
+    <tbody>{% for h in harvests %}<tr>
+      <td>{{ h['date'] }}</td>
+      <td class="text-right mono bold">{{ h['bunches_harvested'] }}</td>
+      <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['harvesting_cost']) }}</td>
+    </tr>{% endfor %}</tbody></table>
+    {% else %}<p class="muted">No harvests yet.</p>{% endif %}
+    <div class="mt-2 flex gap-2">
+      <a href="{{ url_for('harvests.index') }}?farm_id={{ farm['id'] }}" class="btn btn-outline btn-sm">All</a>
+      <a href="{{ url_for('harvests.add') }}?farm_id={{ farm['id'] }}" class="btn btn-primary btn-sm">+ Log</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var mc = {{ (monthly_chart or []) | tojson }};
+  var c1 = document.getElementById('incExpChart');
+  if (c1 && mc && mc.length) {
+    new Chart(c1, {
+      type: 'bar',
+      data: { labels: mc.map(function(d){return d.month;}), datasets: [
+        { label:'Income',   data:mc.map(function(d){return d.income||0;}),   backgroundColor:'#52b78866', borderColor:'#52b788', borderWidth:1.5, borderRadius:4 },
+        { label:'Expenses', data:mc.map(function(d){return d.expenses||0;}), backgroundColor:'#e6394666', borderColor:'#e63946', borderWidth:1.5, borderRadius:4 },
+        { label:'Net', data:mc.map(function(d){return (d.income||0)-(d.expenses||0);}), type:'line',
+          borderColor:'#e9c46a', backgroundColor:'rgba(233,196,106,0.08)',
+          fill:true, tension:0.35, pointRadius:3, borderWidth:2 },
+      ]},
+      options: { responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{position:'top'}},
+        scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'#eef4f0'},
+          ticks:{callback:function(v){return 'GHS '+(v>=1000?(v/1000).toFixed(0)+'k':v);}}} } }
+    });
+  }
+
+  var hc = document.getElementById('harvestChart');
+  var mh = {{ (monthly_chart or []) | tojson }};
+  if (hc && mh && mh.length) {
+    new Chart(hc, {
+      type:'bar',
+      data:{ labels:mh.map(function(d){return d.month;}), datasets:[
+        { label:'Bunches', data:mh.map(function(d){return d.bunches;}), backgroundColor:'#2d6a4f', borderRadius:4 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+        scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'#eef4f0'}} } }
+    });
+  }
+  // Net profit trend
+  var c3 = document.getElementById('netChart');
+  if (c3 && mc && mc.length) {
+    new Chart(c3, {
+      type: 'line',
+      data: { labels: mc.map(function(d){return d.month;}), datasets: [{
+        label: 'Net Profit', data: mc.map(function(d){return d.net||0;}),
+        borderColor: '#e9c46a', backgroundColor: 'rgba(233,196,106,0.1)',
+        fill: true, tension: 0.35, pointRadius: 4,
+        pointBackgroundColor: mc.map(function(d){return (d.net||0)>=0?"#e9c46a":"#e63946";})
+      }]},
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{ x:{grid:{display:false}}, y:{beginAtZero:false, grid:{color:"#eef4f0"},
+          ticks:{callback:function(v){return "GHS "+(v>=1000?(v/1000).toFixed(0)+"k":v);}} } } }
+    });
+  }
+
+  // Expenses by category
+  var ec = document.getElementById("expCatChart");
+  var expCat = {{ (exp_by_cat or []) | tojson }};
+  if (ec && expCat && expCat.length) {
+    new Chart(ec, {
+      type: "doughnut",
+      data: { labels: expCat.map(function(d){return d.category||"Other";}),
+        datasets:[{ data: expCat.map(function(d){return d.total;}),
+          backgroundColor:["#2d6a4f","#52b788","#e9c46a","#f4a261","#e63946","#8ecae6"],
+          borderWidth:2, borderColor:"#fff" }] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:"bottom"}} }
+    });
+  }
+
+})();
+</script>
+{% endblock %}

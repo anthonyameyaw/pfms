@@ -1,0 +1,19 @@
+#!/bin/bash
+PFMS_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$PFMS_DIR"
+
+python3 -c "import flask" 2>/dev/null || pip3 install flask -q
+
+lsof -ti:5000 | xargs kill -9 2>/dev/null
+sleep 1
+
+python3 app.py &
+FLASK_PID=$!
+
+for i in $(seq 1 30); do
+    curl -s http://127.0.0.1:5000/ > /dev/null 2>&1 && break
+    sleep 0.5
+done
+
+open "http://127.0.0.1:5000"
+wait $FLASK_PID

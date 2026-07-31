@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}Log Oil Quality{% endblock %}
+{% block page_title %}Storage{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('storage.index') }}">Storage</a>
+  <span class="breadcrumb-sep">›</span>
+  <span>Log Fresh / Soap Split</span>
+</div>
+
+<div class="page-header">
+  <div>
+    <h2>Log Oil Quality Assessment</h2>
+    <p>Record how many gallons in storage are fresh (human consumption) vs unfresh (soap production).</p>
+  </div>
+</div>
+
+<div class="card" style="max-width:680px;">
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;">
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">🌿 Fresh Oil Palm</div>
+      <div class="kpi-tile-value" style="font-size:1rem;">For human consumption</div>
+      <div class="kpi-tile-note">Higher market value, direct sale</div>
+    </div>
+    <div class="kpi-tile warn">
+      <div class="kpi-tile-label">🧼 Unfresh Oil Palm</div>
+      <div class="kpi-tile-value" style="font-size:1rem;">For soap production</div>
+      <div class="kpi-tile-note">Lower value, industrial use</div>
+    </div>
+  </div>
+
+  <form method="POST">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date of Assessment</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+      <div class="form-group">
+        <label>Total in Storage</label>
+        <input value="{{ '{:,.2f}'.format(total_stock) }} gallons" disabled
+               style="background:var(--surface);font-weight:600;">
+      </div>
+      <div class="form-group">
+        <label>🌿 Fresh Gallons (human consumption)</label>
+        <input type="number" step="0.01" name="fresh_gallons" id="freshGal"
+               placeholder="e.g. 30" oninput="calcTotal()" required>
+      </div>
+      <div class="form-group">
+        <label>🧼 Unfresh Gallons (soap production)</label>
+        <input type="number" step="0.01" name="soap_gallons" id="soapGal"
+               placeholder="e.g. 10" oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>Total Assessed (Auto)</label>
+        <input type="number" id="totalAssessed" disabled
+               style="background:var(--surface);font-weight:600;color:var(--green-mid);">
+      </div>
+      <div class="form-group">
+        <label>Fresh % (Auto)</label>
+        <input type="text" id="freshPct" disabled
+               style="background:var(--surface);font-weight:600;color:var(--green-mid);">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="e.g. Assessment after June processing run — oil stored for 3 weeks"></textarea>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">💾 Save Assessment</button>
+      <a href="{{ url_for('storage.index') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function calcTotal() {
+  const f = parseFloat(document.getElementById('freshGal').value) || 0;
+  const s = parseFloat(document.getElementById('soapGal').value) || 0;
+  const total = f + s;
+  document.getElementById('totalAssessed').value = total.toFixed(2);
+  document.getElementById('freshPct').value = total > 0
+    ? (f / total * 100).toFixed(1) + '% fresh'
+    : '—';
+}
+</script>
+{% endblock %}

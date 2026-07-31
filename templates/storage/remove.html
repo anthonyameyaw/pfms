@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Remove from Storage{% endblock %}
+{% block page_title %}Remove from Storage{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Remove Gallons from Storage</h2>
+    <p>Record palm oil removed — e.g. after a sale or transfer.</p>
+  </div>
+</div>
+
+<div class="card" style="max-width:680px;">
+  <div class="alert alert-green" style="margin-bottom:20px;">
+    <span>🛢</span>
+    <div>Current stock: <strong>{{ '{:,.1f}'.format(current_gallons) }} gallons</strong> available.</div>
+  </div>
+  <form method="POST">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+      <div class="form-group">
+        <label>Gallons to Remove</label>
+        <input type="number" step="0.1" name="gallons"
+               max="{{ current_gallons }}" placeholder="e.g. 20" required>
+      </div>
+      <div class="form-group full">
+        <label>Reason</label>
+        <input name="reason" placeholder="e.g. Sold to buyer — market day" value="Stock removal">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="Buyer name, sale price, etc."></textarea>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-danger">− Remove from Storage</button>
+      <a href="{{ url_for('storage.index') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

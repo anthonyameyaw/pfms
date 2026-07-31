@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Farm P&L Report{% endblock %}
+{% block page_title %}Farm P&L Report{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Farm P&L Report{% if farm %} — {{ farm['name'] }}{% endif %}</h2></div>
+  <a href="{{ url_for('reports.index') }}" class="btn btn-outline">← Back</a>
+</div>
+<div class="card" style="max-width:700px;">
+<form method="GET">
+  <div class="form-grid">
+    <div class="form-group"><label>Farm</label>
+      <select name="farm_id">{% for f in farms %}<option value="{{ f['id'] }}" {% if farm and f['id']==farm['id'] %}selected{% endif %}>{{ f['name'] }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>From</label><input type="date" name="date_from" value="{{ date_from }}"></div>
+    <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ date_to }}"></div>
+    <div class="form-group" style="justify-content:flex-end;"><label>&nbsp;</label><button type="submit" class="btn btn-primary">Generate</button></div>
+  </div>
+</form>
+</div>
+
+{% if report %}
+<div class="card">
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-label">Total Income</div><div class="stat-value positive">GHS {{ '{:,.2f}'.format(report.total_income) }}</div></div>
+    <div class="stat-card red"><div class="stat-label">Total Expenses</div><div class="stat-value negative">GHS {{ '{:,.2f}'.format(report.total_expenses) }}</div></div>
+    <div class="stat-card {% if report.net >= 0 %}gold{% else %}red{% endif %}">
+      <div class="stat-label">Net Profit/Loss</div>
+      <div class="stat-value {% if report.net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(report.net) }}</div>
+    </div>
+  </div>
+  <hr class="divider">
+  <div class="card-title">Income Breakdown</div>
+  <table><thead><tr><th>Date</th><th>Type</th><th>Buyer</th><th class="text-right">Amount (GHS)</th></tr></thead>
+  <tbody>{% for r in report.income %}<tr>
+    <td>{{ r['date'] }}</td><td>{{ r['income_type'] }}</td><td>{{ r['buyer'] or '—' }}</td>
+    <td class="text-right mono positive">{{ '{:,.2f}'.format(r['total_amount']) }}</td>
+  </tr>{% else %}<tr><td colspan="4" class="muted">No income records.</td></tr>{% endfor %}</tbody>
+  </table>
+  <hr class="divider">
+  <div class="card-title">Expense Breakdown</div>
+  <table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th class="text-right">Amount (GHS)</th></tr></thead>
+  <tbody>{% for r in report.expenses %}<tr>
+    <td>{{ r['date'] }}</td><td>{{ r['category'] }}</td><td>{{ r['description'] or '—' }}</td>
+    <td class="text-right mono negative">{{ '{:,.2f}'.format(r['amount']) }}</td>
+  </tr>{% else %}<tr><td colspan="4" class="muted">No expense records.</td></tr>{% endfor %}
+  <tr style="background:var(--grey-light);">
+    <td colspan="3" class="bold">Harvest Costs</td><td class="text-right mono negative bold">GHS {{ '{:,.2f}'.format(report.harvest_cost) }}</td>
+  </tr>
+  <tr style="background:var(--grey-light);">
+    <td colspan="3" class="bold">Transport Costs</td><td class="text-right mono negative bold">GHS {{ '{:,.2f}'.format(report.transport_cost) }}</td>
+  </tr>
+  </tbody></table>
+</div>
+{% endif %}
+{% endblock %}

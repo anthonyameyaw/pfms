@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Pruning{% endblock %}
+{% block page_title %}Pruning Management{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Pruning Overview</h2><p>All oil palm trees must be pruned every 6 months</p></div>
+  <a href="{{ url_for('pruning.add_batch') }}" class="btn btn-primary">+ Log Pruning Batch</a>
+</div>
+{% for fs in farm_statuses %}
+<div class="card">
+  <div class="flex justify-between items-center mb-2">
+    <div>
+      <strong>{{ fs['farm']['name'] }}</strong>
+      <span class="small muted" style="margin-left:10px;">{{ fs['farm']['total_trees'] or '?' }} total trees · {{ fs['farm']['size_acres'] }} acres</span>
+    </div>
+    <a href="{{ url_for('pruning.history', farm_id=fs['farm']['id']) }}" class="btn btn-outline btn-sm">History</a>
+  </div>
+
+  {% if fs['cycle'] %}
+    {% set cycle = fs['cycle'] %}
+    {% if cycle['is_complete'] %}
+      <div class="alert alert-green">✅ Pruning cycle complete. Next due: <strong>{{ cycle['next_due_date'] }}</strong></div>
+    {% else %}
+      {% if fs['farm']['total_trees'] and fs['farm']['total_trees'] > 0 %}
+        {% set pct = (cycle['total_trees_pruned'] / fs['farm']['total_trees'] * 100)|int %}
+        <div class="flex justify-between mb-1 small">
+          <span>{{ cycle['total_trees_pruned'] }} / {{ fs['farm']['total_trees'] }} trees pruned this cycle</span>
+          <span class="muted">Started {{ cycle['cycle_start_date'] }}</span>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" style="width:{{ [pct,100]|min }}%;"></div></div>
+        <div class="small muted mt-1">{{ pct }}% complete</div>
+      {% else %}
+        <div class="alert alert-amber">⚠️ Set total trees in farm profile to track pruning progress.</div>
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <div class="alert alert-amber">No pruning cycle started for this farm.</div>
+  {% endif %}
+
+  {% if fs['batches'] %}
+  <div class="table-wrap mt-2">
+    <table><thead><tr><th>Date</th><th class="text-right">Trees Pruned</th><th class="text-center">Workers</th><th class="text-right">Cost (GHS)</th></tr></thead>
+    <tbody>{% for b in fs['batches'][:5] %}<tr>
+      <td>{{ b['date'] }}</td>
+      <td class="text-right mono">{{ b['trees_pruned'] }}</td>
+      <td class="text-center">{{ b['num_labourers'] }}</td>
+      <td class="text-right mono">{{ '{:,.2f}'.format(b['cost']) }}</td>
+    </tr>{% endfor %}</tbody></table>
+  </div>
+  {% endif %}
+
+  <div class="mt-2">
+    <a href="{{ url_for('pruning.add_batch') }}?farm_id={{ fs['farm']['id'] }}" class="btn btn-outline btn-sm">+ Log Batch</a>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

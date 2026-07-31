@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Log Price{% endblock %}
+{% block page_title %}Log Price Entry{% endblock %}
+{% block content %}
+<div class="card" style="max-width:700px;">
+<form method="POST">
+  <div class="form-grid">
+    <div class="form-group"><label>Date</label><input type="date" name="date" required></div>
+    <div class="form-group"><label>Product</label>
+      <select name="product">{% for p in products %}<option>{{ p }}</option>{% endfor %}</select></div>
+    <div class="form-group"><label>Buyer / Source</label><input name="buyer_source"></div>
+    <div class="form-group"><label>Unit</label><input name="unit" placeholder="e.g. per bunch, per gallon"></div>
+    <div class="form-group"><label>Price Offered (GHS)</label><input type="number" step="0.01" name="price_offered"></div>
+    <div class="form-group"><label>Price Accepted (GHS)</label><input type="number" step="0.01" name="price_accepted"></div>
+    <div class="form-group"><label>Negotiation Outcome</label>
+      <select name="negotiation_outcome">{% for o in outcomes %}<option>{{ o }}</option>{% endfor %}</select></div>
+    <div class="form-group full"><label>Notes</label><textarea name="notes" placeholder="Market conditions, context, notes..."></textarea></div>
+  </div>
+  <div class="flex gap-2 mt-2">
+    <button type="submit" class="btn btn-primary">Save Price Entry</button>
+    <a href="{{ url_for('prices.index') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+</div>
+{% endblock %}

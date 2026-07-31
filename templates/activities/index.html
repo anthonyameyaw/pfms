@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Activities{% endblock %}
+{% block page_title %}Farm Activities{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h2>Activity Log</h2><p>All logged farm activities across all farms</p></div>
+  <a href="{{ url_for('activities.add') }}" class="btn btn-primary">+ Log Activity</a>
+</div>
+
+<div class="filter-bar">
+  <form method="GET" class="flex gap-2 items-center" style="flex-wrap:wrap;width:100%;">
+    <div class="form-group"><label>Farm</label>
+      <select name="farm_id"><option value="">All Farms</option>
+      {% for f in farms %}<option value="{{ f['id'] }}" {% if filters.farm_id==f['id']|string %}selected{% endif %}>{{ f['name'] }}</option>{% endfor %}
+      </select></div>
+    <div class="form-group"><label>Activity Type</label>
+      <select name="activity_type"><option value="">All Types</option>
+      {% for t in activity_types %}<option {% if filters.activity_type==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select></div>
+    <div class="form-group"><label>From</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+    <div class="form-group"><label>To</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+    <div class="form-group" style="justify-content:flex-end;"><label>&nbsp;</label>
+      <button type="submit" class="btn btn-primary">Filter</button></div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th><th>Farm</th><th>Type</th><th>Description</th>
+          <th class="text-center">Workers</th>
+          <th class="text-right">Labour (GHS)</th>
+          <th class="text-right">Materials (GHS)</th>
+          <th class="text-right">Total Cost</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in activities %}
+      <tr>
+        <td>{{ a['date'] }}</td>
+        <td style="font-weight:500;">{{ a['farm_name'] }}</td>
+        <td>
+          <span class="badge
+            {% if a['activity_type']=='Harvesting' %}badge-green
+            {% elif a['activity_type']=='Pruning' %}badge-gold
+            {% elif a['activity_type']=='Planting' %}badge-amber
+            {% else %}badge-grey{% endif %}">
+            {{ a['activity_type'] }}
+          </span>
+        </td>
+        <td class="small muted">{{ a['description'] or '—' }}</td>
+        <td class="text-center">{{ a['num_labourers'] or '—' }}</td>
+        <td class="text-right mono">{{ '{:,.2f}'.format(a['labour_cost'] or 0) }}</td>
+        <td class="text-right mono">{{ '{:,.2f}'.format(a['materials_cost'] or 0) }}</td>
+        <td class="text-right mono bold">{{ '{:,.2f}'.format(a['total_cost'] or 0) }}</td>
+        <td>
+          <div class="flex gap-2">
+            <a href="{{ url_for('activities.edit', activity_id=a['id']) }}" class="btn btn-sm btn-outline">Edit</a>
+            <form method="POST" action="{{ url_for('activities.delete', activity_id=a['id']) }}" data-confirm="Delete this activity?">
+              <button class="btn btn-sm btn-danger">Del</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="text-center muted" style="padding:40px;">No activities found.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

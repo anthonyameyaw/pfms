@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline — PFMS</title>
+  <style>
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #1a3c2e;
+      color: #f8faf9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      text-align: center;
+      padding: 24px;
+    }
+    .card {
+      background: rgba(255,255,255,0.07);
+      border-radius: 20px;
+      padding: 48px 36px;
+      max-width: 360px;
+    }
+    .icon { font-size: 4rem; margin-bottom: 20px; display: block; }
+    h1 { font-size: 1.6rem; margin-bottom: 12px; color: #e9c46a; }
+    p  { font-size: 0.9rem; color: rgba(255,255,255,0.65); line-height: 1.65; margin-bottom: 28px; }
+    .btn {
+      display: inline-block;
+      background: #e9c46a;
+      color: #1a3c2e;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="icon">🌴</span>
+    <h1>You're Offline</h1>
+    <p>Palm Farm Management needs a connection to your Mac to load fresh data.
+       Connect to your WiFi network and try again.</p>
+    <button class="btn" onclick="window.location.reload()">Try Again</button>
+  </div>
+</body>
+</html>

@@ -1,0 +1,384 @@
+{% extends 'base.html' %}
+{% block title %}Finances{% endblock %}
+{% block page_title %}Financial Overview{% endblock %}
+
+{% block extra_css %}
+<style>
+.metric-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 0.72rem; font-weight: 600;
+}
+.pill-green  { background: var(--green-pale); color: var(--green-dark); }
+.pill-amber  { background: var(--amber-pale); color: #7a4010; }
+.pill-red    { background: var(--red-pale);   color: var(--red); }
+.analytics-label {
+  font-size: 0.62rem; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--ink-soft);
+  font-weight: 600; margin-bottom: 14px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Financial Overview</h2>
+    <p>Consolidated P&L, harvest analytics, and cost intelligence.</p>
+  </div>
+</div>
+
+<!-- Totals -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Income</div>
+    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_income) }}</div>
+    <div class="stat-sub">YTD: GHS {{ '{:,.2f}'.format(ytd_income) }}</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Total Expenses</div>
+    <div class="stat-value negative">GHS {{ '{:,.2f}'.format(total_expenses) }}</div>
+    <div class="stat-sub">YTD: GHS {{ '{:,.2f}'.format(ytd_exp) }}</div>
+  </div>
+  <div class="stat-card {% if total_net >= 0 %}gold{% else %}red{% endif %}">
+    <div class="stat-label">Net Profit / Loss</div>
+    <div class="stat-value {% if total_net >= 0 %}positive{% else %}negative{% endif %}">
+      GHS {{ '{:,.2f}'.format(total_net) }}
+    </div>
+    <div class="stat-sub">Margin: {{ net_margin }}%</div>
+  </div>
+  <div class="stat-card amber">
+    <div class="stat-label">YTD Net</div>
+    <div class="stat-value {% if ytd_net >= 0 %}positive{% else %}negative{% endif %}">
+      GHS {{ '{:,.2f}'.format(ytd_net) }}
+    </div>
+    <div class="stat-sub">Jan {{ today.year }} → now</div>
+  </div>
+</div>
+
+<!-- Monthly chart -->
+<div class="card">
+  <div class="card-title">📈 Monthly Income vs Expenses</div>
+  {% if monthly_chart %}
+  <div class="chart-container"><canvas id="monthlyChart"></canvas></div>
+  {% else %}
+  <p class="muted" style="padding:40px 0;text-align:center;">No monthly data yet.</p>
+  {% endif %}
+</div>
+
+<!-- Per-farm P&L -->
+<div class="card">
+  <div class="card-title">🌿 Per-Farm P&L</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Farm</th><th>Status</th>
+          <th class="text-right">Income</th>
+          <th class="text-right">Harvest Labour</th>
+          <th class="text-right">Threshing Labour</th>
+          <th class="text-right">Transport</th>
+          <th class="text-right">Activity Costs</th>
+          <th class="text-right">Total Expenses</th>
+          <th class="text-right">Net</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in farm_rows %}
+        <tr>
+          <td><a href="{{ url_for('farms.detail', farm_id=f.id) }}" style="color:var(--green-mid);font-weight:500;">{{ f.name }}</a></td>
+          <td>
+            <span class="badge {% if f.status=='Active' %}badge-green{% elif f.status=='Inactive' %}badge-red{% else %}badge-amber{% endif %}">{{ f.status }}</span>
+          </td>
+          <td class="text-right mono {% if f.income > 0 %}positive{% endif %}">{{ '{:,.2f}'.format(f.income) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.harv_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.thresh_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.transport_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.activity_cost) }}</td>
+          <td class="text-right mono {% if f.expenses > 0 %}negative{% endif %}">{{ '{:,.2f}'.format(f.expenses) }}</td>
+          <td class="text-right mono bold {% if f.net >= 0 %}positive{% else %}negative{% endif %}">{{ '{:,.2f}'.format(f.net) }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="background:var(--surface);font-weight:600;border-top:2px solid var(--border);">
+          <td colspan="2">Total — All Farms</td>
+          <td class="text-right mono positive">{{ '{:,.2f}'.format(total_farm_income) }}</td>
+          <td colspan="4"></td>
+          <td class="text-right mono negative">{{ '{:,.2f}'.format(total_farm_expenses) }}</td>
+          <td class="text-right mono {% if total_farm_income - total_farm_expenses >= 0 %}positive{% else %}negative{% endif %}">
+            {{ '{:,.2f}'.format(total_farm_income - total_farm_expenses) }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Plant P&L -->
+<div class="card">
+  <div class="card-title">🏭 Processing Plant P&L</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:16px;">
+    <div class="mom-box">
+      <div class="small muted">Gross Revenue</div>
+      <div class="mom-value positive">GHS {{ '{:,.2f}'.format(plant_income) }}</div>
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Electricity Cost</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(plant.electricity or 0) }}</div>
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Operator Pay (30%)</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(plant.operator_pay or 0) }}</div>
+    </div>
+    <div class="mom-box">
+      <div class="small muted">Other Expenses</div>
+      <div class="mom-value negative">GHS {{ '{:,.2f}'.format(plant_other_exp) }}</div>
+    </div>
+    <div class="mom-box" style="border-color:{% if plant_net >= 0 %}var(--green-light){% else %}var(--red){% endif %};">
+      <div class="small muted">Plant Net</div>
+      <div class="mom-value {% if plant_net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(plant_net) }}</div>
+    </div>
+  </div>
+</div>
+
+{% if harvest_analytics %}
+<!-- ═══════════════════════════════════════════════════════════════
+     HARVEST ANALYTICS
+═══════════════════════════════════════════════════════════════ -->
+<div style="margin:28px 0 12px;">
+  <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:var(--green-dark);">
+    Harvest Analytics
+  </div>
+  <p class="muted small">Per-harvest cost intelligence across {{ harvest_analytics|length }} recorded harvests.</p>
+</div>
+
+<!-- Chart row 1: Cost Distribution + Husks per Gallon -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="card">
+    <div class="analytics-label">① Cost Distribution — % of Gallon Value</div>
+    <p class="small muted mb-2">For each harvest: what % of the gallon sale value went to labour, transport, and what remained as gross margin.</p>
+    <div class="chart-container" style="height:280px;"><canvas id="costDistChart"></canvas></div>
+    <div class="flex gap-3 mt-2 small muted items-center" style="flex-wrap:wrap;">
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#2d6a4f;display:inline-block;"></span>Labour</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#f4a261;display:inline-block;"></span>Transport</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:2px;background:#e9c46a;display:inline-block;"></span>Net Margin</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="analytics-label">② Husks Processed per Gallon Produced</div>
+    <p class="small muted mb-2">Efficiency metric — how many husks were needed to produce one gallon of palm oil. Lower = more efficient.</p>
+    <div class="chart-container" style="height:280px;"><canvas id="husksPerGalChart"></canvas></div>
+  </div>
+
+</div>
+
+<!-- Chart row 2: Levelized Cost + Gross Margin per Gallon -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="card">
+    <div class="analytics-label">③ Levelized Cost per Gallon (GHS/gal)</div>
+    <p class="small muted mb-2">Total cost (labour + transport) divided by gallons produced. Green = below GHS 20/gal, amber = 20–35, red = above 35.</p>
+    <div class="chart-container" style="height:260px;"><canvas id="levelizedChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="analytics-label">④ Gross Margin per Gallon (GHS)</div>
+    <p class="small muted mb-2">Sale price minus levelized cost per gallon. Shows how much you actually keep per gallon after production costs.</p>
+    <div class="chart-container" style="height:260px;"><canvas id="marginChart"></canvas></div>
+  </div>
+
+</div>
+
+<!-- Chart row 3: Absolute cost stack + Labour ROI -->
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-bottom:20px;">
+
+  <div class="card">
+    <div class="analytics-label">⑤ Absolute Cost Stack per Harvest (GHS)</div>
+    <p class="small muted mb-2">Stacked bars showing the actual GHS amounts spent on harvest labour, threshing labour, and transport for each harvest.</p>
+    <div class="chart-container" style="height:260px;"><canvas id="costStackChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <div class="analytics-label">⑥ Labour Return on Investment</div>
+    <p class="small muted mb-2">GHS of income earned per GHS spent on labour. Higher = better labour efficiency.</p>
+    <div class="chart-container" style="height:260px;"><canvas id="labourRoiChart"></canvas></div>
+  </div>
+
+</div>
+
+<!-- Harvest analytics table -->
+<div class="card">
+  <div class="analytics-label">Detailed Harvest Analytics Table</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Farm</th>
+          <th class="text-right">Bunches</th>
+          <th class="text-right">Gallons</th>
+          <th class="text-right">Income</th>
+          <th class="text-right">Harv. Labour</th>
+          <th class="text-right">Thresh. Labour</th>
+          <th class="text-right">Transport</th>
+          <th class="text-right">Levelized Cost</th>
+          <th class="text-right">Margin/Gal</th>
+          <th class="text-right">Labour %</th>
+          <th class="text-right">Trans %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in harvest_analytics %}
+        <tr>
+          <td class="small">{{ h.date }}</td>
+          <td class="small">{{ h.farm.replace('Palm Farm ','') }}</td>
+          <td class="text-right mono">{{ h.bunches }}</td>
+          <td class="text-right mono">{{ '{:.1f}'.format(h.gallons) }}</td>
+          <td class="text-right mono positive">{{ '{:,.2f}'.format(h.income) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(h.harv_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(h.thresh_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(h.trans_cost) }}</td>
+          <td class="text-right">
+            <span class="metric-pill {% if h.levelized <= 20 %}pill-green{% elif h.levelized <= 35 %}pill-amber{% else %}pill-red{% endif %}">
+              GHS {{ '{:.2f}'.format(h.levelized) }}
+            </span>
+          </td>
+          <td class="text-right">
+            <span class="metric-pill {% if h.margin_per_gal >= 20 %}pill-green{% elif h.margin_per_gal >= 5 %}pill-amber{% else %}pill-red{% endif %}">
+              {{ '{:.2f}'.format(h.margin_per_gal) }}
+            </span>
+          </td>
+          <td class="text-right mono small">{{ h.lab_pct }}%</td>
+          <td class="text-right mono small">{{ h.trans_pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  // Monthly income/expenses chart
+  var mc = {{ monthly_chart | tojson }};
+  var c1 = document.getElementById('monthlyChart');
+  if (c1 && mc && mc.length) {
+    new Chart(c1, {
+      type: 'bar',
+      data: { labels: mc.map(function(d){return d.month;}), datasets: [
+        { label:'Income',   data:mc.map(function(d){return d.income;}),   backgroundColor:'#52b788', borderRadius:4 },
+        { label:'Expenses', data:mc.map(function(d){return d.expenses;}), backgroundColor:'#e63946', borderRadius:4 },
+        { label:'Net', data:mc.map(function(d){return d.net;}), type:'line',
+          borderColor:'#e9c46a', backgroundColor:'rgba(233,196,106,0.08)',
+          fill:true, tension:0.35, pointRadius:3, borderWidth:2 },
+      ]},
+      options: { responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{position:'top'}},
+        scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'#eef4f0'},
+          ticks:{callback:function(v){return 'GHS '+(v>=1000?(v/1000).toFixed(0)+'k':v);}}} } }
+    });
+  }
+
+  // Harvest analytics charts
+  var ha = {{ harvest_analytics | tojson }};
+  if (!ha || !ha.length) return;
+
+  var labels = ha.map(function(d) { return d.date + ' · ' + d.farm.replace('Palm Farm ',''); });
+
+  // Cost distribution
+  var c2 = document.getElementById('costDistChart');
+  var haIncome = ha.filter(function(d){return d.income > 0;});
+  var labelsIncome = haIncome.map(function(d){return d.date+' · '+d.farm.replace('Palm Farm ','');});
+  if (c2 && haIncome.length) {
+    new Chart(c2, {
+      type:'bar',
+      data:{ labels:labelsIncome, datasets:[
+        { label:'Labour %',    data:haIncome.map(function(d){return d.lab_pct;}),   backgroundColor:'#2d6a4f', stack:'s', borderRadius:2 },
+        { label:'Transport %', data:haIncome.map(function(d){return d.trans_pct;}), backgroundColor:'#f4a261', stack:'s', borderRadius:2 },
+        { label:'Net Margin %',data:haIncome.map(function(d){return d.net_pct;}),   backgroundColor:'#e9c46a', stack:'s', borderRadius:2 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+        scales:{ x:{stacked:true,grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+          y:{stacked:true,beginAtZero:true,max:100,ticks:{callback:function(v){return v+'%';}},grid:{color:'#eef4f0'}} } }
+    });
+  }
+
+  // Husks per gallon
+  var c3 = document.getElementById('husksPerGalChart');
+  if (c3) new Chart(c3, {
+    type:'bar',
+    data:{ labels:labels, datasets:[{ label:'Husks/Gallon',
+      data:ha.map(function(d){return d.husks_per_gal;}),
+      backgroundColor:ha.map(function(d){return d.husks_per_gal<=8?'#52b788':d.husks_per_gal<=15?'#f4a261':'#e63946';}),
+      borderRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return v+' hks/gal';}}} } }
+  });
+
+  // Levelized cost
+  var c4 = document.getElementById('levelizedChart');
+  if (c4) new Chart(c4, {
+    type:'bar',
+    data:{ labels:labels, datasets:[{ label:'Levelized Cost (GHS/gal)',
+      data:ha.map(function(d){return d.levelized;}),
+      backgroundColor:ha.map(function(d){return d.levelized<=20?'#52b788':d.levelized<=35?'#f4a261':'#e63946';}),
+      borderRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return 'GHS '+v;}}} } }
+  });
+
+  // Gross margin per gallon
+  var haPrice = ha.filter(function(d){return d.price>0;});
+  var labelsPrice = haPrice.map(function(d){return d.date+' · '+d.farm.replace('Palm Farm ','');});
+  var c5 = document.getElementById('marginChart');
+  if (c5 && haPrice.length) new Chart(c5, {
+    type:'bar',
+    data:{ labels:labelsPrice, datasets:[{ label:'Margin/Gallon (GHS)',
+      data:haPrice.map(function(d){return d.margin_per_gal;}),
+      backgroundColor:haPrice.map(function(d){return d.margin_per_gal>=20?'#52b788':d.margin_per_gal>=5?'#e9c46a':'#e63946';}),
+      borderRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return 'GHS '+v;}}} } }
+  });
+
+  // Cost stack
+  var c6 = document.getElementById('costStackChart');
+  if (c6) new Chart(c6, {
+    type:'bar',
+    data:{ labels:labels, datasets:[
+      { label:'Harvest Labour', data:ha.map(function(d){return d.harv_cost;}),   backgroundColor:'#2d6a4f', stack:'s', borderRadius:2 },
+      { label:'Threshing',      data:ha.map(function(d){return d.thresh_cost;}), backgroundColor:'#52b788', stack:'s', borderRadius:2 },
+      { label:'Transport',      data:ha.map(function(d){return d.trans_cost;}),  backgroundColor:'#f4a261', stack:'s', borderRadius:2 },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top'}},
+      scales:{ x:{stacked:true,grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{stacked:true,beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return 'GHS '+v;}}} } }
+  });
+
+  // Labour ROI
+  var c7 = document.getElementById('labourRoiChart');
+  if (c7) new Chart(c7, {
+    type:'bar',
+    data:{ labels:labels, datasets:[{ label:'Income per GHS Labour',
+      data:ha.map(function(d){return d.labour_roi;}),
+      backgroundColor:ha.map(function(d){return d.labour_roi>=3?'#52b788':d.labour_roi>=1.5?'#e9c46a':'#e63946';}),
+      borderRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return v+'x';}}} } }
+  });
+
+})();
+</script>
+{% endblock %}

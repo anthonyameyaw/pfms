@@ -1,0 +1,281 @@
+{% extends 'base.html' %}
+{% block title %}Log Processing Run{% endblock %}
+{% block page_title %}Log Processing Run{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div>
+    <h2>Log Processing Run</h2>
+    <p>Enter own farms and outside farmer output separately. All costs apply to the combined total.</p>
+  </div>
+</div>
+
+<form method="POST" id="runForm">
+
+  <div class="card">
+    <div class="card-title">📋 Run Date</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" name="date" required>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section 1: Own Farms ─────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title" style="color:var(--green);">🌿 Section 1 — Produce from My Farms</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Own Farms — Gallons of Palm Oil</label>
+        <input type="number" step="0.01" name="own_farms_gallons_input" id="ownGallonsInput"
+               oninput="calcAll()" placeholder="e.g. 20">
+      </div>
+      <div class="form-group">
+        <label>Own Farms — Litres (Auto: gallons × 25)</label>
+        <input type="number" id="ownLitresDisplay" disabled
+               style="background:var(--surface-2);color:var(--green);font-weight:600;">
+      </div>
+      <div class="form-group">
+        <label>Own Farms — Bunches Processed</label>
+        <input type="number" name="own_farms_bunches" placeholder="e.g. 300">
+      </div>
+    </div>
+
+    <!-- Contributing farms -->
+    <div style="margin-top:16px;">
+      <div class="card-title" style="margin-bottom:10px;">Contributing Farms (optional)</div>
+      <div id="farm-rows">
+        <div class="flex gap-2 mb-2">
+          <div class="form-group" style="flex:1;margin:0;">
+            <select name="contributing_farm_ids">
+              <option value="">Select farm...</option>
+              {% for f in farms %}<option value="{{ f['id'] }}">{{ f['name'] }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="width:160px;margin:0;">
+            <input type="number" name="contributing_bunches" placeholder="Bunches">
+          </div>
+        </div>
+      </div>
+      <button type="button" onclick="addFarmRow()" class="btn btn-outline btn-sm">+ Add farm</button>
+    </div>
+  </div>
+
+  <!-- ── Section 2: Outside Farmers ──────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title" style="color:var(--gold-dark);">👨‍🌾 Section 2 — Produce from Outside Farmers</div>
+    <div class="alert alert-amber" style="margin-bottom:16px;">
+      <span>ℹ️</span>
+      <div>Electricity and operator costs are charged on the <strong>combined total output</strong> — outside farmers share these costs proportionally. Their fee (GHS 40/gallon) is revenue on top.</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Outside Farmers — Gallons of Palm Oil</label>
+        <input type="number" step="0.01" name="outside_farmers_gallons_input" id="outGallonsInput"
+               oninput="calcAll()" placeholder="e.g. 8">
+      </div>
+      <div class="form-group">
+        <label>Outside Farmers — Litres (Auto: gallons × 25)</label>
+        <input type="number" id="outLitresDisplay" disabled
+               style="background:var(--surface-2);color:var(--gold-dark);font-weight:600;">
+      </div>
+      <div class="form-group">
+        <label>Outside Farmers — Bunches</label>
+        <input type="number" name="outside_farmers_bunches" placeholder="e.g. 120">
+      </div>
+      <div class="form-group">
+        <label>Outside Farmer Fees Collected (GHS)</label>
+        <input type="number" step="0.01" name="outside_farmer_fees" id="outsideFees"
+               oninput="calcAll()" placeholder="Auto: GHS 40 × their gallons">
+        <span class="small muted" style="margin-top:4px;display:block;" id="feeNote"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Auto-Calculated Financials ───────────────────────────────────── -->
+  <div id="preview" style="display:none;">
+  <div class="card" style="border:2px solid var(--green-light);">
+    <div class="card-title" style="color:var(--forest-mid);">⚡ Auto-Calculated Financials (Combined Total)</div>
+
+    <!-- Total output -->
+    <div style="background:var(--surface-2);border-radius:var(--radius);padding:16px;margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:10px;">📦 Total Plant Output</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div><div class="small muted">Own Farms</div><div class="mono bold positive" id="p_own_gal">—</div></div>
+        <div><div class="small muted">Outside Farmers</div><div class="mono bold" style="color:var(--gold-dark);" id="p_out_gal">—</div></div>
+        <div><div class="small muted">Total Combined</div><div class="mono bold" style="font-size:1.1rem;" id="p_total_gal">—</div></div>
+      </div>
+    </div>
+
+    <!-- Revenue breakdown -->
+    <div style="background:var(--green-pale);border-radius:8px;padding:16px;margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:10px;">💰 Gross Revenue (all plant income)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div>
+          <div class="small muted">Own Oil Revenue</div>
+          <div class="small muted">(own gal × GHS 40)</div>
+          <div class="mono bold positive" id="p_own_rev">—</div>
+        </div>
+        <div>
+          <div class="small muted">+ Outside Farmer Fees</div>
+          <div class="small muted">(their charge to you)</div>
+          <div class="mono bold" style="color:var(--gold-dark);" id="p_outside_fees">—</div>
+        </div>
+        <div style="border-left:2px solid var(--green-light);padding-left:12px;">
+          <div class="small muted">= GROSS REVENUE</div>
+          <div class="small muted">(total plant income)</div>
+          <div class="mono bold positive" style="font-size:1.1rem;" id="p_gross">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Costs & net -->
+    <div style="background:var(--red-pale);border-radius:8px;padding:16px;margin-bottom:12px;">
+      <div class="card-title" style="margin-bottom:10px;">📤 Costs — applied to full combined volume</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <div>
+          <div class="small muted">Electricity Cost</div>
+          <div class="small muted">(total gal ÷ 20 × GHS 120)</div>
+          <div class="mono bold negative" id="p_elec">—</div>
+        </div>
+        <div style="border-left:2px solid var(--red);padding-left:12px;">
+          <div class="small muted">= NET REVENUE</div>
+          <div class="small muted">(gross − electricity)</div>
+          <div class="mono bold" id="p_net" style="font-size:1.1rem;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Splits -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+      <div style="border:1.5px solid var(--border);border-radius:8px;padding:14px;">
+        <div class="small muted">Operator Pay (30% of net)</div>
+        <div class="mono bold" style="font-size:1.1rem;" id="p_op">—</div>
+      </div>
+      <div style="border:1.5px solid var(--green-light);border-radius:8px;padding:14px;">
+        <div class="small muted">Company Revenue (70% of net)</div>
+        <div class="mono bold positive" style="font-size:1.1rem;" id="p_co">—</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ── Cash Collection ───────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">💵 Cash Collection</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Total Amount Billed (Auto)</label>
+        <input type="number" id="totalBilled" disabled
+               style="background:var(--surface-2);color:var(--green);font-weight:600;">
+      </div>
+      <div class="form-group">
+        <label>Cash Collected (GHS)</label>
+        <input type="number" step="0.01" name="cash_collected" id="cashCollected"
+               oninput="calcOutstanding()" placeholder="Amount received today">
+      </div>
+      <div class="form-group">
+        <label>Cash Outstanding (Auto)</label>
+        <input type="number" id="cashOutstandingDisplay" disabled
+               style="background:var(--surface-2);color:var(--red);font-weight:600;">
+        <input type="hidden" name="cash_outstanding" id="cashOutstandingHidden">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-bottom:20px;"><label>Notes</label>
+    <textarea name="notes" placeholder="Any notes about this run..."></textarea>
+  </div>
+
+  <div class="flex gap-2">
+    <button type="submit" class="btn btn-primary">💾 Save Processing Run</button>
+    <a href="{{ url_for('plant.index') }}" class="btn btn-outline">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const farmsJson = {{ farms_json | tojson }};
+let _co = 0, _fees = 0, _gross = 0;
+
+function calcAll() {
+  const ownGal  = parseFloat(document.getElementById('ownGallonsInput').value)  || 0;
+  const outGal  = parseFloat(document.getElementById('outGallonsInput').value)  || 0;
+  const totalGal = ownGal + outGal;
+  if (totalGal <= 0) { document.getElementById('preview').style.display='none'; return; }
+
+  const ownL   = ownGal  * 25;
+  const outL   = outGal  * 25;
+  const totalL = totalGal * 25;
+
+  document.getElementById('ownLitresDisplay').value  = ownL.toFixed(1);
+  document.getElementById('outLitresDisplay').value  = outL.toFixed(1);
+
+  // Auto-suggest outside fees if not manually set
+  const feesInput = document.getElementById('outsideFees');
+  if (!feesInput.dataset.userSet && outGal > 0) {
+    feesInput.value = (outGal * 40).toFixed(2);
+  }
+  document.getElementById('feeNote').textContent =
+    outGal > 0 ? `Suggested: GHS 40 × ${outGal.toFixed(2)} gal = GHS ${(outGal*40).toFixed(2)}` : '';
+
+  const fees    = parseFloat(feesInput.value) || 0;
+  const ownRev  = ownGal * 40;                    // own oil income
+  const gross   = ownRev + fees;                  // ALL plant income
+  const elec    = (totalGal / 20) * 120;          // electricity on TOTAL volume
+  const net     = gross - elec;
+  const op      = net * 0.30;
+  const co      = net * 0.70;
+  _co    = co;
+  _fees  = fees;
+  _gross = gross;
+
+  // Fill display
+  document.getElementById('p_own_gal').textContent   = ownGal.toFixed(2)   + ' gal';
+  document.getElementById('p_out_gal').textContent   = outGal.toFixed(2)   + ' gal';
+  document.getElementById('p_total_gal').textContent = totalGal.toFixed(2) + ' gal';
+  document.getElementById('p_own_rev').textContent   = 'GHS ' + ownRev.toFixed(2);
+  document.getElementById('p_outside_fees').textContent = 'GHS ' + fees.toFixed(2);
+  document.getElementById('p_gross').textContent     = 'GHS ' + gross.toFixed(2);
+  document.getElementById('p_elec').textContent      = 'GHS ' + elec.toFixed(2);
+  document.getElementById('p_net').textContent       = 'GHS ' + net.toFixed(2);
+  document.getElementById('p_op').textContent        = 'GHS ' + op.toFixed(2);
+  document.getElementById('p_co').textContent        = 'GHS ' + co.toFixed(2);
+
+  document.getElementById('preview').style.display = '';
+  calcOutstanding();
+}
+
+function calcOutstanding() {
+  // Total billed = gross revenue = all factory income (what the factory is owed)
+  const total     = _gross;
+  const collected = parseFloat(document.getElementById('cashCollected').value) || 0;
+  const outstanding = Math.max(0, total - collected);
+  document.getElementById('totalBilled').value           = total.toFixed(2);
+  document.getElementById('cashOutstandingDisplay').value= outstanding.toFixed(2);
+  document.getElementById('cashOutstandingHidden').value = outstanding.toFixed(2);
+}
+
+document.getElementById('outsideFees').addEventListener('input', function() {
+  this.dataset.userSet = true; _fees = parseFloat(this.value)||0; calcOutstanding();
+});
+
+function addFarmRow() {
+  const div = document.createElement('div');
+  div.className = 'flex gap-2 mb-2';
+  div.innerHTML = `
+    <div class="form-group" style="flex:1;margin:0;">
+      <select name="contributing_farm_ids">
+        <option value="">Select farm...</option>
+        ${farmsJson.map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" style="width:160px;margin:0;">
+      <input type="number" name="contributing_bunches" placeholder="Bunches">
+    </div>`;
+  document.getElementById('farm-rows').appendChild(div);
+}
+</script>
+{% endblock %}
