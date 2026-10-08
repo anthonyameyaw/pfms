@@ -1,7 +1,9 @@
+from database.periods import business_today, comparison_periods, shift_month
 """Farms — CRUD, detail views, and analytics."""
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from database.db import query, execute, get_all_farms, get_farm
+from database.financials import financial_summary, monthly_financials, month_start_months_ago
 from datetime import date, timedelta
 
 farms_bp = Blueprint('farms', __name__)
@@ -20,7 +22,8 @@ def detail(farm_id):
         flash('Farm not found.', 'error')
         return redirect(url_for('farms.index'))
 
-    today      = date.today()
+    today      = business_today()
+    periods = comparison_periods(today)
     year_start = today.replace(month=1, day=1).isoformat()
     prev_year  = (today.replace(month=1, day=1) - timedelta(days=1)).replace(month=1, day=1).isoformat()
     last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1).isoformat()
@@ -56,37 +59,13 @@ def detail(farm_id):
         (farm_id,), one=True
     )
 
-    # ── All-time totals with expense breakdown ────────────────────────────────
-    # Income = sum of gallons_sold_income from harvests (sold gallons revenue)
-    # plus any manually recorded other income in farm_income
-    harvest_sales_income = _sum(
-        "SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND gallons_sold_income > 0",
-        (farm_id,)
-    )
-    other_income = _sum(
-        "SELECT COALESCE(SUM(total_amount),0) FROM farm_income WHERE farm_id=? AND income_type='Other'",
-        (farm_id,)
-    )
-    total_income = harvest_sales_income + other_income
-
-    # Labour from activities (non-harvest types — weeding, spraying, etc.)
-    activity_labour_total = _sum(
-        "SELECT COALESCE(SUM(labour_cost + materials_cost),0) FROM activities WHERE farm_id=? AND activity_type != 'Harvesting'",
-        (farm_id,)
-    )
-    # Manually recorded farm expenses
-    manual_exp_total    = _sum("SELECT COALESCE(SUM(amount),0) FROM farm_expenses WHERE farm_id=?", (farm_id,))
-    farm_exp_total      = activity_labour_total + manual_exp_total
-
-    # Harvesting labour (harvester + collector pay from harvests table)
-    harvest_exp_total   = _sum("SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE farm_id=?", (farm_id,))
-
-    # Transport (all trips attributed to this farm)
-    transport_exp_total = _sum("SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE farm_id=?", (farm_id,))
-
-    total_expenses      = farm_exp_total + harvest_exp_total + transport_exp_total
-    total_net           = total_income - total_expenses
-    total_bunches       = _sum("SELECT COALESCE(SUM(bunches_harvested),0) FROM harvests WHERE farm_id=?", (farm_id,))
+    # One financial source list for cards, charts, farm views and reports.
+    summary = financial_summary(farm_id=farm_id)
+    total_income, total_expenses, total_net = summary['total_income'], summary['total_exp'], summary['net']
+    farm_exp_total = round(summary['act_exp'] + summary['manual_exp'] + summary['internal_processing_exp'], 2)
+    harvest_exp_total = round(summary['harv_exp'] + summary['thresh_exp'], 2)
+    transport_exp_total = summary['trans_exp']
+    total_bunches = _sum("SELECT COALESCE(SUM(bunches_harvested),0) FROM harvests WHERE farm_id=?", (farm_id,))
 
     # ── Gallons tracking ──────────────────────────────────────────────────────
     pending_harvests = query(
@@ -99,134 +78,37 @@ def detail(farm_id):
         "SELECT COALESCE(SUM(gallons_produced),0) FROM harvests WHERE farm_id=? AND gallons_produced > 0",
         (farm_id,)
     )
-    total_gallons_sold = _sum(
-        "SELECT COALESCE(SUM(gallons_sold),0) FROM harvests WHERE farm_id=? AND gallons_sold > 0",
-        (farm_id,)
-    )
-    total_sold_income = _sum(
-        "SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=?",
-        (farm_id,)
-    )
-    added = _sum(
-        "SELECT COALESCE(SUM(gallons),0) FROM storage_transactions WHERE farm_id=? AND transaction_type='Addition'",
-        (farm_id,)
-    )
-    removed = _sum(
-        "SELECT COALESCE(SUM(gallons),0) FROM storage_transactions WHERE farm_id=? AND transaction_type='Removal'",
-        (farm_id,)
-    )
-    gallons_in_storage = float(query("SELECT COALESCE(SUM(gallons_produced),0)-COALESCE(SUM(gallons_sold),0) AS v FROM harvests WHERE farm_id=? AND gallons_produced>0", (farm_id,), one=True)['v'] or 0)
-
-
-    # ── This month vs last month ──────────────────────────────────────────────
-    this_m_income = _sum("SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND date>=? AND gallons_sold_income>0", (farm_id, this_month_start))
-    last_m_income = _sum("SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND date>=? AND date<? AND gallons_sold_income>0", (farm_id, last_month_start, this_month_start))
-    this_m_exp    = _expenses(farm_id, this_month_start)
-    last_m_exp    = _expenses(farm_id, last_month_start, this_month_start)
-    this_m_net    = this_m_income - this_m_exp
-    last_m_net    = last_m_income - last_m_exp
-
-    # ── YTD vs prior year ────────────────────────────────────────────────────
-    ytd_income    = _sum("SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND date>=? AND gallons_sold_income>0", (farm_id, year_start))
-    prior_income  = _sum("SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND date>=? AND date<? AND gallons_sold_income>0", (farm_id, prev_year, year_start))
-    ytd_exp       = _expenses(farm_id, year_start)
-    prior_exp     = _expenses(farm_id, prev_year, year_start)
+    current = financial_summary(this_month_start, today.isoformat(), farm_id)
+    last = financial_summary(last_month_start, (today.replace(day=1)-timedelta(days=1)).isoformat(), farm_id)
+    ytd = financial_summary(year_start, today.isoformat(), farm_id)
+    prior = financial_summary(periods['previous_year_start'], periods['previous_year_end'], farm_id)
+    comparable = financial_summary(periods['previous_month_start'], periods['previous_month_end'], farm_id)
+    this_m_income, this_m_exp, this_m_net = current['total_income'], current['total_exp'], current['net']
+    last_m_income, last_m_exp, last_m_net = last['total_income'], last['total_exp'], last['net']
+    ytd_income, ytd_exp = ytd['total_income'], ytd['total_exp']
+    prior_income, prior_exp = prior['total_income'], prior['total_exp']
 
     # ── MoM and YoY changes ──────────────────────────────────────────────────
-    mom_income_chg = _pct_change(last_m_income, this_m_income)
-    mom_exp_chg    = _pct_change(last_m_exp, this_m_exp)
-    mom_net_chg    = _pct_change(last_m_net, this_m_net)
+    mom_income_chg = _pct_change(comparable['total_income'], this_m_income)
+    mom_exp_chg    = _pct_change(comparable['total_exp'], this_m_exp)
+    mom_net_chg    = _pct_change(comparable['net'], this_m_net)
     yoy_income_chg = _pct_change(prior_income, ytd_income)
     yoy_exp_chg    = _pct_change(prior_exp, ytd_exp)
 
-    # ── Monthly time series (last 18 months) ──────────────────────────────────
-    monthly_income_rows = query("""
-        SELECT strftime('%Y-%m', date) AS month,
-               SUM(gallons_sold_income) AS total
-        FROM harvests
-        WHERE farm_id=? AND date >= DATE('now','-18 months')
-          AND gallons_sold_income > 0
-        GROUP BY month ORDER BY month
-    """, (farm_id,))
-
-    # Monthly expenses = activity labour/materials + manual farm expenses + transport
-    monthly_exp_rows = query("""
-        SELECT month, SUM(total) AS total FROM (
-            SELECT strftime('%Y-%m', date) AS month,
-                   SUM(labour_cost + materials_cost) AS total
-            FROM activities
-            WHERE farm_id=? AND date >= DATE('now','-18 months')
-              AND activity_type != 'Harvesting'
-            GROUP BY month
-            UNION ALL
-            SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total
-            FROM farm_expenses
-            WHERE farm_id=? AND date >= DATE('now','-18 months')
-            GROUP BY month
-            UNION ALL
-            SELECT strftime('%Y-%m', date) AS month, SUM(total_cost) AS total
-            FROM transport_logs
-            WHERE farm_id=? AND date >= DATE('now','-18 months')
-            GROUP BY month
-            UNION ALL
-            SELECT strftime('%Y-%m', date) AS month, SUM(harvesting_cost) AS total
-            FROM harvests
-            WHERE farm_id=? AND date >= DATE('now','-18 months')
-            GROUP BY month
-        ) GROUP BY month ORDER BY month
-    """, (farm_id, farm_id, farm_id, farm_id))
-
-    monthly_harvest_rows = query("""
-        SELECT strftime('%Y-%m', date) AS month,
-               SUM(bunches_harvested) AS bunches,
-               SUM(harvesting_cost) AS cost
-        FROM harvests WHERE farm_id=? AND date >= DATE('now','-18 months')
-        GROUP BY month ORDER BY month
-    """, (farm_id,))
-
-    # Merge into unified month list
-    all_months = sorted(set(
-        [r['month'] for r in monthly_income_rows] +
-        [r['month'] for r in monthly_exp_rows] +
-        [r['month'] for r in monthly_harvest_rows]
-    ))
-    inc_map = {r['month']: r['total']   for r in monthly_income_rows}
-    exp_map = {r['month']: r['total']   for r in monthly_exp_rows}
-    bun_map = {r['month']: r['bunches'] for r in monthly_harvest_rows}
-    hco_map = {r['month']: r['cost']    for r in monthly_harvest_rows}
-
-    monthly_chart = [
-        {
-            'month'   : m,
-            'income'  : round(inc_map.get(m) or 0, 2),
-            'expenses': round(exp_map.get(m) or 0, 2),
-            'net'     : round((inc_map.get(m) or 0) - (exp_map.get(m) or 0), 2),
-            'bunches' : int(bun_map.get(m) or 0),
-            'harvest_cost': round(hco_map.get(m) or 0, 2),
-        }
-        for m in all_months
-    ]
-
-    # ── Expense breakdown by category (all sources combined) ─────────────────
-    exp_by_cat = query("""
-        SELECT category, SUM(total) AS total FROM (
-            SELECT activity_type AS category, SUM(labour_cost + materials_cost) AS total
-            FROM activities
-            WHERE farm_id=? AND activity_type != 'Harvesting' AND (labour_cost > 0 OR materials_cost > 0)
-            GROUP BY activity_type
-            UNION ALL
-            SELECT 'Harvesting Labour' AS category, SUM(harvesting_cost) AS total
-            FROM harvests WHERE farm_id=? AND harvesting_cost > 0
-            UNION ALL
-            SELECT 'Transport' AS category, SUM(total_cost) AS total
-            FROM transport_logs WHERE farm_id=? AND total_cost > 0
-            UNION ALL
-            SELECT category, SUM(amount) AS total
-            FROM farm_expenses WHERE farm_id=?
-            GROUP BY category
-        ) WHERE total > 0
-        GROUP BY category ORDER BY total DESC
-    """, (farm_id, farm_id, farm_id, farm_id))
+    chart_from = month_start_months_ago(today, 17)
+    monthly_chart = monthly_financials(chart_from, today.isoformat(), farm_id)
+    harvest_months = query("""
+        SELECT substr(date,1,7) AS month, SUM(bunches_harvested) AS bunches,
+               SUM(COALESCE(harvesting_cost,0)+COALESCE(threshing_cost,0)) AS cost
+        FROM harvests WHERE farm_id=? AND date>=? AND date<=? GROUP BY month
+    """, (farm_id, chart_from, today.isoformat()))
+    production = {r['month']: r for r in harvest_months}
+    for m in monthly_chart:
+        h = production.get(m['month'])
+        m['bunches'] = int(h['bunches'] or 0) if h else 0
+        m['harvest_cost'] = round(h['cost'] or 0, 2) if h else 0
+    exp_by_cat = [{'category': item['label'], 'total': item['value']}
+                  for item in summary['expense_items'] if item['value']]
 
     # ── KPIs & recommended actions ───────────────────────────────────────────
     kpis, actions = _build_kpis_and_actions(
@@ -250,9 +132,6 @@ def detail(farm_id):
         total_bunches           = int(total_bunches),
         pending_harvests        = pending_harvests,
         total_gallons_produced  = round(total_gallons_produced, 2),
-        total_gallons_sold      = round(total_gallons_sold, 2),
-        gallons_in_storage      = round(gallons_in_storage, 2),
-        total_sold_income       = round(total_sold_income, 2),
         farm_exp_total       = farm_exp_total,
         harvest_exp_total    = harvest_exp_total,
         transport_exp_total  = transport_exp_total,
@@ -289,8 +168,8 @@ def add():
                                crop_type, status, total_trees, notes)
             VALUES (?,?,?,?,?,?,?,?)
         """, (
-            request.form['name'], request.form['location'],
-            request.form['constituency'], request.form.get('size_acres') or None,
+            request.form['name'], request.form.get('location', ''),
+            request.form.get('constituency', ''), request.form.get('size_acres') or None,
             request.form['crop_type'], request.form['status'],
             request.form.get('total_trees') or 0, request.form.get('notes', ''),
         ))
@@ -311,8 +190,8 @@ def edit(farm_id):
             size_acres=?, crop_type=?, status=?, total_trees=?, notes=?
             WHERE id=?
         """, (
-            request.form['name'], request.form['location'],
-            request.form['constituency'], request.form.get('size_acres') or None,
+            request.form['name'], request.form.get('location', ''),
+            request.form.get('constituency', ''), request.form.get('size_acres') or None,
             request.form['crop_type'], request.form['status'],
             request.form.get('total_trees') or 0, request.form.get('notes', ''),
             farm_id,
@@ -327,36 +206,6 @@ def edit(farm_id):
 def _sum(sql, params=()):
     row = query(sql, params, one=True)
     return float(list(row)[0]) if row else 0.0
-
-
-def _expenses(farm_id, from_date=None, to_date=None):
-    """Sum ALL expense sources for a farm, optionally filtered by date range.
-    Includes: activity labour/materials (non-harvest), manual farm expenses,
-    harvest labour, and transport costs.
-    """
-    def q(sql, params):
-        return _sum(sql, params)
-
-    if from_date and to_date:
-        dp2 = (farm_id, from_date, to_date)
-        act_exp   = q("SELECT COALESCE(SUM(labour_cost + materials_cost),0) FROM activities WHERE farm_id=? AND date>=? AND date<? AND activity_type != 'Harvesting'", dp2)
-        manual_exp= q("SELECT COALESCE(SUM(amount),0) FROM farm_expenses WHERE farm_id=? AND date>=? AND date<?", dp2)
-        harv_exp  = q("SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE farm_id=? AND date>=? AND date<?", dp2)
-        trans_exp = q("SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE farm_id=? AND date>=? AND date<?", dp2)
-    elif from_date:
-        dp1 = (farm_id, from_date)
-        act_exp   = q("SELECT COALESCE(SUM(labour_cost + materials_cost),0) FROM activities WHERE farm_id=? AND date>=? AND activity_type != 'Harvesting'", dp1)
-        manual_exp= q("SELECT COALESCE(SUM(amount),0) FROM farm_expenses WHERE farm_id=? AND date>=?", dp1)
-        harv_exp  = q("SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE farm_id=? AND date>=?", dp1)
-        trans_exp = q("SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE farm_id=? AND date>=?", dp1)
-    else:
-        dp0 = (farm_id,)
-        act_exp   = q("SELECT COALESCE(SUM(labour_cost + materials_cost),0) FROM activities WHERE farm_id=? AND activity_type != 'Harvesting'", dp0)
-        manual_exp= q("SELECT COALESCE(SUM(amount),0) FROM farm_expenses WHERE farm_id=?", dp0)
-        harv_exp  = q("SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE farm_id=?", dp0)
-        trans_exp = q("SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE farm_id=?", dp0)
-
-    return act_exp + manual_exp + harv_exp + trans_exp
 
 
 def _pct_change(old, new):
@@ -378,37 +227,31 @@ def _build_kpis_and_actions(
     actions = []
 
     # ── KPI 1: Profitability margin ──────────────────────────────────────────
-    if total_income > 0:
+    if total_income > 0 and farm['crop_type'] != 'Oil Palm':
         margin = (total_net / total_income) * 100
         kpis.append({
             'label' : 'Profit Margin (All Time)',
             'value' : f'{margin:.1f}%',
-            'status': 'good' if margin >= 40 else 'warn' if margin >= 15 else 'bad',
-            'note'  : 'Target: ≥ 40%',
+            'status': 'good' if margin >= 0 else 'bad',
+            'note'  : 'Recorded net ÷ recorded income',
         })
-        if margin < 15:
+        if margin < 0:
             actions.append({
                 'priority': 'high',
                 'action'  : 'Profit margin is critically low. Review your largest expense categories and compare labour rates against your Labour Intel benchmarks.',
             })
-        elif margin < 40:
-            actions.append({
-                'priority': 'medium',
-                'action'  : f'Profit margin is {margin:.1f}% — below the 40% target. Consider reducing input costs or improving harvest yield.',
-            })
-
     # ── KPI 2: MoM income growth ─────────────────────────────────────────────
-    if mom_income_chg is not None:
+    if mom_income_chg is not None and farm['crop_type'] != 'Oil Palm':
         kpis.append({
             'label' : 'Income Growth (MoM)',
             'value' : f'{("+" if mom_income_chg >= 0 else "")}{mom_income_chg}%',
             'status': 'good' if mom_income_chg >= 5 else 'warn' if mom_income_chg >= 0 else 'bad',
-            'note'  : 'Month-on-month vs last month',
+            'note'  : 'Same elapsed period last month',
         })
         if mom_income_chg < 0:
             actions.append({
                 'priority': 'high',
-                'action'  : f'Income dropped {abs(mom_income_chg)}% this month vs last month. Check if a harvest was delayed or missed.',
+                'action'  : f'Income dropped {abs(mom_income_chg)}% this month vs the same elapsed period last month. Check if a harvest was delayed or missed.',
             })
 
     # ── KPI 3: Expense control ───────────────────────────────────────────────
@@ -417,7 +260,7 @@ def _build_kpis_and_actions(
             'label' : 'Expense Change (MoM)',
             'value' : f'{("+" if mom_exp_chg >= 0 else "")}{mom_exp_chg}%',
             'status': 'good' if mom_exp_chg <= 0 else 'warn' if mom_exp_chg <= 15 else 'bad',
-            'note'  : 'Lower is better',
+            'note'  : 'Same elapsed period last month; compare with work performed',
         })
         if mom_exp_chg > 20:
             actions.append({
@@ -426,7 +269,7 @@ def _build_kpis_and_actions(
             })
 
     # ── KPI 4: YoY income growth ─────────────────────────────────────────────
-    if yoy_income_chg is not None:
+    if yoy_income_chg is not None and farm['crop_type'] != 'Oil Palm':
         kpis.append({
             'label' : 'YTD Income Growth (YoY)',
             'value' : f'{("+" if yoy_income_chg >= 0 else "")}{yoy_income_chg}%',
@@ -445,15 +288,9 @@ def _build_kpis_and_actions(
         kpis.append({
             'label' : 'Cost Per Bunch (All Time)',
             'value' : f'GHS {cost_per_bunch:.2f}',
-            'status': 'good' if cost_per_bunch < 5 else 'warn' if cost_per_bunch < 10 else 'bad',
+            'status': 'warn',
             'note'  : 'Total expenses ÷ bunches harvested',
         })
-        if cost_per_bunch > 10:
-            actions.append({
-                'priority': 'high',
-                'action'  : f'Cost per bunch is GHS {cost_per_bunch:.2f} — very high. Consider if transport or labour costs can be reduced.',
-            })
-
     # ── KPI 6: Farm status flags ─────────────────────────────────────────────
     if farm['status'] == 'Inactive':
         kpis.append({
@@ -481,11 +318,11 @@ def _build_kpis_and_actions(
 
     # ── KPI 7: Harvest consistency ───────────────────────────────────────────
     if len(monthly_chart) >= 3:
-        recent_harvests = [m['bunches'] for m in monthly_chart[-3:]]
-        if all(b == 0 for b in recent_harvests) and farm['status'] == 'Active':
+        recent_harvests = [m['bunches'] for m in monthly_chart if m['month'] < business_today().strftime('%Y-%m')][-3:]
+        if len(recent_harvests)==3 and all(b == 0 for b in recent_harvests) and farm['status'] == 'Active':
             kpis.append({
                 'label' : 'Harvest Activity',
-                'value' : '3 Months No Harvest',
+                'value' : '3 Months Without Records',
                 'status': 'bad',
                 'note'  : 'No bunches logged recently',
             })
@@ -496,7 +333,7 @@ def _build_kpis_and_actions(
 
     # ── No issues found ───────────────────────────────────────────────────────
     if not actions:
-        if total_income > 0:
+        if total_income > 0 and farm['crop_type'] != 'Oil Palm':
             actions.append({
                 'priority': 'good',
                 'action'  : 'No significant issues detected. Keep logging consistently to maintain accurate financial intelligence.',
@@ -504,7 +341,7 @@ def _build_kpis_and_actions(
         else:
             actions.append({
                 'priority': 'medium',
-                'action'  : 'No income recorded yet for this farm. Start logging harvests and income to unlock financial analysis.',
+                'action'  : 'Oil sales are pooled. Use the farm cost-per-gallon profile to compare recorded production costs.' if farm['crop_type']=='Oil Palm' else 'No income recorded yet for this farm.',
             })
 
     return kpis, actions

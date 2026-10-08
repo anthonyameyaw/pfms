@@ -12,7 +12,7 @@
 <div class="page-header">
   <div>
     <h2>Log Oil Quality Assessment</h2>
-    <p>Record how many gallons in storage are fresh (human consumption) vs unfresh (soap production).</p>
+    <p>Count all oil in storage and enter the fresh and soap quantities. This replaces the previous split; it does not add oil.</p>
   </div>
 </div>
 
@@ -32,6 +32,8 @@
   </div>
 
   <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="small muted">Fresh plus soap gallons must equal stock on the assessment date. For the same date, recorded sales and purchases come before this assessment. Until you know the split, leave the oil marked Not yet assessed.</p>
     <div class="form-grid">
       <div class="form-group">
         <label>Date of Assessment</label>
@@ -44,12 +46,12 @@
       </div>
       <div class="form-group">
         <label>🌿 Fresh Gallons (human consumption)</label>
-        <input type="number" step="0.01" name="fresh_gallons" id="freshGal"
+        <input type="number" step="0.01" name="fresh_gallons" id="freshGal" min="0"
                placeholder="e.g. 30" oninput="calcTotal()" required>
       </div>
       <div class="form-group">
         <label>🧼 Unfresh Gallons (soap production)</label>
-        <input type="number" step="0.01" name="soap_gallons" id="soapGal"
+        <input type="number" step="0.01" name="soap_gallons" id="soapGal" min="0" required
                placeholder="e.g. 10" oninput="calcTotal()">
       </div>
       <div class="form-group">

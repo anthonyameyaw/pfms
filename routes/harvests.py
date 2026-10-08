@@ -1,9 +1,12 @@
+from database.periods import business_today, comparison_periods, shift_month
 """Harvests — linked to activities, with full labour breakdown and transport."""
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from database.db import query, execute, get_all_farms
 from datetime import date, timedelta
 import statistics
+
+from database.harvest_workflow import save_harvest, delete_harvest
 
 harvests_bp = Blueprint('harvests', __name__)
 
@@ -31,7 +34,7 @@ def index():
     farms      = get_all_farms()
     farm_totals = query("""
         SELECT f.name, COALESCE(SUM(h.bunches_harvested),0) AS total_bunches,
-               COALESCE(SUM(h.oil_income),0) AS total_income
+               COALESCE(SUM(h.gallons_produced),0) AS total_gallons
         FROM farms f LEFT JOIN harvests h ON h.farm_id=f.id
         WHERE f.crop_type='Oil Palm'
         GROUP BY f.id ORDER BY f.id
@@ -50,90 +53,12 @@ def add():
     activity_id = request.args.get('activity_id', '')
 
     if request.method == 'POST':
-        fid         = int(request.form['farm_id'])
-        bunches     = int(request.form.get('bunches_harvested') or 0)
-
-        # Issue 6: Labour breakdown
-        harvester_pay = float(request.form.get('harvester_pay') or 0)
-        # Auto-calc: 3 GHS per bunch for harvester if not overridden
-        if not harvester_pay and bunches:
-            harvester_pay = bunches * 3.0
-
-        collector_pay  = float(request.form.get('collector_pay') or 0)
-        num_collectors = int(request.form.get('num_collectors') or 0)
-        num_labourers  = num_collectors
-        total_labour   = harvester_pay + collector_pay
-
-        # Issue 2: Gallons & income
-        gallons_produced = float(request.form.get('gallons_produced') or 0)
-        price_per_gallon = float(request.form.get('price_per_gallon') or 0)
-        oil_income       = gallons_produced * price_per_gallon
-
-        # Issue 7: Transport
-        transport_mode = request.form.get('transport_mode', '')
-        driver_pay     = float(request.form.get('driver_pay') or 0)
-        fuel_cost      = float(request.form.get('fuel_cost') or 0)
-        tricycle_rent  = float(request.form.get('tricycle_rent') or 0)
-
-        harvest_id = execute("""
-            INSERT INTO harvests
-                (farm_id, activity_id, date, bunches_harvested,
-                 num_labourers, num_collectors,
-                 harvester_pay, collector_pay, harvesting_cost,
-                 gallons_produced, price_per_gallon, oil_income,
-                 transport_mode, driver_pay, fuel_cost, tricycle_rent,
-                 notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            fid,
-            request.form.get('activity_id') or None,
-            request.form['date'],
-            bunches,
-            num_labourers,
-            num_collectors,
-            harvester_pay,
-            collector_pay,
-            total_labour,
-            gallons_produced,
-            price_per_gallon,
-            oil_income,
-            transport_mode,
-            driver_pay,
-            fuel_cost,
-            tricycle_rent,
-            request.form.get('notes', ''),
-        ))
-
-        # Update the linked activity's labour_cost to match harvest total labour
-        act_id = request.form.get('activity_id')
-        if act_id:
-            execute("UPDATE activities SET labour_cost=?, num_labourers=? WHERE id=?",
-                    (total_labour, num_labourers, act_id))
-
-        # Auto-record oil income as farm_income entry
-        if oil_income > 0:
-            execute("""
-                INSERT INTO farm_income (farm_id, date, income_type, buyer, quantity, unit_price, notes)
-                VALUES (?,?,'FFB Sale','Palm Oil Sales',?,?,?)
-            """, (fid, request.form['date'], gallons_produced, price_per_gallon,
-                  f'Auto from harvest log — {bunches} bunches → {gallons_produced} gallons'))
-
-        # Auto-record transport as transport_log entry
-        if transport_mode == 'Pickup' and (driver_pay > 0 or fuel_cost > 0):
-            execute("""
-                INSERT INTO transport_logs (date, transport_type, farm_id, driver_pay, fuel_cost, notes)
-                VALUES (?,?,?,?,?,?)
-            """, (request.form['date'], 'Pickup', fid, driver_pay, fuel_cost,
-                  'Auto from harvest log'))
-
-        if transport_mode == 'Tricycle' and tricycle_rent > 0:
-            execute("""
-                INSERT INTO transport_logs (date, transport_type, farm_id, rental_cost, notes)
-                VALUES (?,?,?,?,?)
-            """, (request.form['date'], 'Tricycle', fid, tricycle_rent,
-                  'Auto from harvest log'))
-
-        flash('Harvest recorded successfully.', 'success')
+        try:
+            save_harvest(request.form, activity_id=request.form.get('activity_id') or None)
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
+        flash('Harvest saved. Processed oil contributes to pooled storage; record sales in Storage.', 'success')
         return redirect(url_for('harvests.index'))
 
     # Determine default transport mode based on farm
@@ -156,64 +81,52 @@ def edit(harvest_id):
         return redirect(url_for('harvests.index'))
     farms = get_all_farms()
     if request.method == 'POST':
-        bunches       = int(request.form.get('bunches_harvested') or 0)
-        harvester_pay = float(request.form.get('harvester_pay') or bunches * 3.0)
-        collector_pay = float(request.form.get('collector_pay') or 0)
-        total_labour  = harvester_pay + collector_pay
-        gallons       = float(request.form.get('gallons_produced') or 0)
-        price         = float(request.form.get('price_per_gallon') or 0)
-        execute("""
-            UPDATE harvests SET farm_id=?, date=?, bunches_harvested=?,
-            num_collectors=?, harvester_pay=?, collector_pay=?, harvesting_cost=?,
-            gallons_produced=?, price_per_gallon=?, oil_income=?,
-            transport_mode=?, driver_pay=?, fuel_cost=?, tricycle_rent=?, notes=?
-            WHERE id=?
-        """, (
-            request.form['farm_id'], request.form['date'], bunches,
-            request.form.get('num_collectors') or 0,
-            harvester_pay, collector_pay, total_labour,
-            gallons, price, gallons * price,
-            request.form.get('transport_mode', ''),
-            request.form.get('driver_pay') or 0,
-            request.form.get('fuel_cost') or 0,
-            request.form.get('tricycle_rent') or 0,
-            request.form.get('notes', ''),
-            harvest_id,
-        ))
-        flash('Harvest updated.', 'success')
+        try:
+            save_harvest(request.form, harvest_id=harvest_id)
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
+        flash('Harvest updated. Pooled stock reflects the saved production once.', 'success')
         return redirect(url_for('harvests.index'))
+    transport = query('SELECT * FROM transport_logs WHERE harvest_id=?', (harvest_id,), one=True)
+    harvest = dict(harvest)
+    if transport:
+        harvest.update(driver_pay=transport['driver_pay'],fuel_cost=transport['fuel_cost'],tricycle_rent=transport['rental_cost'],transport_mode=transport['transport_type'])
     return render_template('harvests/edit.html',
         harvest=harvest, farms=farms, pickup_farm_id=PICKUP_FARM_ID)
 
 
 @harvests_bp.route('/<int:harvest_id>/delete', methods=['POST'])
 def delete(harvest_id):
-    execute("DELETE FROM harvests WHERE id=?", (harvest_id,))
+    try:
+        delete_harvest(harvest_id)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('harvests.index'))
     flash('Harvest deleted.', 'success')
     return redirect(url_for('harvests.index'))
 
 
 @harvests_bp.route('/forecast')
 def forecast():
-    farms     = query("SELECT * FROM farms WHERE status='Active' AND crop_type='Oil Palm'")
-    forecasts = []
+    today=business_today()
+    last_complete=today.replace(day=1)-timedelta(days=1)
+    first=shift_month(today.replace(day=1),-12)
+    months=[shift_month(first,i).strftime('%Y-%m') for i in range(12)]
+    farms=query("SELECT * FROM farms WHERE status='Active' AND crop_type='Oil Palm'")
+    forecasts=[]
     for farm in farms:
-        monthly = query("""
-            SELECT strftime('%Y-%m', date) AS month, SUM(bunches_harvested) AS total
-            FROM harvests WHERE farm_id=? AND date >= DATE('now','-12 months')
-            GROUP BY month ORDER BY month
-        """, (farm['id'],))
-        if monthly:
-            values    = [r['total'] for r in monthly]
-            avg       = statistics.mean(values)
-            trend     = values[-1] - values[0] if len(values) > 1 else 0
-            projected = []
-            for i in range(1, 4):
-                proj_month = (date.today().replace(day=1) + timedelta(days=32*i)).replace(day=1)
-                proj_value = max(0, round(avg + (trend * i / len(values))))
-                projected.append({'month': proj_month.strftime('%B %Y'), 'bunches': proj_value})
-            forecasts.append({'farm': farm, 'monthly': [dict(r) for r in monthly],
-                              'average': round(avg), 'projected': projected})
-        else:
-            forecasts.append({'farm': farm, 'monthly': [], 'average': 0, 'projected': []})
-    return render_template('harvests/forecast.html', forecasts=forecasts)
+        rows=query("""SELECT substr(date,1,7) month,SUM(bunches_harvested) total,COUNT(*) records
+            FROM harvests WHERE farm_id=? AND date>=? AND date<=? GROUP BY month""",
+            (farm['id'],first.isoformat(),last_complete.isoformat()))
+        found={r['month']:r for r in rows}
+        monthly=[dict(month=m,total=(found[m]['total'] or 0) if m in found else 0,has_records=m in found) for m in months]
+        values=[m['total'] for m in monthly]
+        avg=statistics.mean(values)
+        enough=sum(r['records'] for r in rows)>=2
+        projected=[dict(month=shift_month(today.replace(day=1),i).strftime('%B %Y'),
+                        bunches=max(0,round(avg))) for i in range(1,4)] if enough else []
+        forecasts.append(dict(farm=farm,monthly=monthly,average=round(avg),projected=projected,
+                              unrecorded_months=sum(not m['has_records'] for m in monthly)))
+    return render_template('harvests/forecast.html',forecasts=forecasts,
+                           period_start=first.isoformat(),period_end=last_complete.isoformat())

@@ -1,43 +1,304 @@
 {% extends 'base.html' %}
 {% block title %}Labour Intelligence{% endblock %}
-{% block page_title %}Labour Cost Intelligence{% endblock %}
+{% block page_title %}Labour Intelligence{% endblock %}
+
+{% block extra_css %}
+<style>
+.cph-pill { display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:0.72rem;font-weight:700; }
+.cph-good { background:var(--green-pale);color:var(--green-dark); }
+.cph-warn { background:var(--amber-pale);color:#7a4010; }
+.cph-bad  { background:var(--red-pale);color:var(--red); }
+.calc-result { background:var(--green-pale);border:1.5px solid var(--green-light);border-radius:var(--r);padding:20px 24px;margin-top:20px;display:none; }
+.calc-result.show { display:block; }
+.calc-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px; }
+.calc-kpi { text-align:center;padding:14px;background:white;border-radius:var(--r-sm); }
+.calc-kpi-val { font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:700;color:var(--green-dark); }
+.calc-kpi-lbl { font-size:0.66rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-soft);margin-top:4px; }
+.note-box { background:var(--gold-pale);border-left:3px solid var(--gold);border-radius:var(--r-sm);padding:10px 14px;font-size:0.82rem;color:var(--ink-mid);margin-bottom:16px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
-  <div><h2>Labour Intelligence</h2><p>Evidence base for negotiating labour rates</p></div>
-</div>
-<div class="card">
-  <div class="card-title">Benchmarks by Activity Type</div>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Activity</th><th class="text-right">Sessions</th><th class="text-right">Avg Cost/Session</th><th class="text-right">Min</th><th class="text-right">Max</th><th class="text-right">Cost/Labourer</th></tr></thead>
-    <tbody>
-    {% for b in benchmarks %}
-    {% if b['count'] > 0 %}
-    <tr>
-      <td><span class="badge {% if b['activity']=='Harvesting' %}badge-green{% elif b['activity']=='Pruning' %}badge-gold{% else %}badge-grey{% endif %}">{{ b['activity'] }}</span></td>
-      <td class="text-right mono">{{ b['count'] }}</td>
-      <td class="text-right mono bold">GHS {{ '{:,.2f}'.format(b['avg_cost']) }}</td>
-      <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(b['min_cost']) }}</td>
-      <td class="text-right mono negative">GHS {{ '{:,.2f}'.format(b['max_cost']) }}</td>
-      <td class="text-right mono">GHS {{ '{:,.2f}'.format(b['cost_per_labourer']) }}</td>
-    </tr>
-    {% endif %}
-    {% endfor %}
-    </tbody>
-  </table></div>
-  <div class="alert alert-green mt-2">💡 Use these benchmarks when negotiating with labourers — you can show them the historical average cost per session for each activity type.</div>
+  <div>
+    <h2>Labour Intelligence</h2>
+    <p>Collector cost per husk — trends, farm benchmarks, and harvest planning calculator.</p>
+  </div>
 </div>
 
-<div class="card">
-  <div class="card-title">Highest Labour Cost Activities (All Time)</div>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Date</th><th>Farm</th><th>Activity</th><th class="text-right">Workers</th><th class="text-right">Labour Cost (GHS)</th></tr></thead>
-    <tbody>{% for r in recent %}
-    <tr>
-      <td>{{ r['date'] }}</td><td>{{ r['farm_name'] }}</td>
-      <td><span class="badge badge-grey">{{ r['activity_type'] }}</span></td>
-      <td class="text-right mono">{{ r['num_labourers'] or '—' }}</td>
-      <td class="text-right mono bold negative">{{ '{:,.2f}'.format(r['labour_cost']) }}</td>
-    </tr>{% endfor %}</tbody>
-  </table></div>
+<!-- KPIs -->
+<div class="stat-grid">
+  <div class="stat-card gold">
+    <div class="stat-label">Overall Avg Collector Cost / Husk</div>
+    <div class="stat-value serif">GHS {{ '{:.4f}'.format(overall_avg_cph) }}</div>
+    <div class="stat-sub">all oil palm farms · adj. +10%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Collector Pay</div>
+    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_collector) }}</div>
+    <div class="stat-sub">all time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Husks (adj. +10%)</div>
+    <div class="stat-value serif">{{ '{:,.1f}'.format(total_husks_adj) }}</div>
+    <div class="stat-sub">incl. fallen fruits allowance</div>
+  </div>
 </div>
+
+<div class="note-box">
+  ℹ️ <strong>Planning assumption: +10% husk adjustment.</strong> This is an estimate, not a measured fallen-fruit count. All husk counts are increased by 10% to account for oil palm fruits that fall from husks when they mature. Collectors gather these fallen fruits from beneath the trees together with the husks, so effective collection volume is greater than recorded husks alone. Validation: Palm Farm Factory 2026-07-17 → 63 husks × 1.10 = 69.3 adj. husks, GHS 100 collector pay ÷ 69.3 = <strong>GHS 1.4430/husk</strong>.
+</div>
+
+<!-- Per-farm summary -->
+<div class="card">
+  <div class="card-title">🌴 Collector Cost per Husk — Farm Benchmark</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Farm</th>
+          <th class="text-right">Harvests</th>
+          <th class="text-right">Total Husks</th>
+          <th class="text-right">Adj. Husks (+10%)</th>
+          <th class="text-right">Collectors Used</th>
+          <th class="text-right">Total Collector Pay</th>
+          <th class="text-right">Cost / Husk (adj.)</th>
+          <th class="text-right">vs. Average</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in farm_summary %}
+        <tr>
+          <td style="font-weight:500;">{{ f.farm.replace('Palm Farm ','') }}</td>
+          <td class="text-right mono">{{ f.harvests }}</td>
+          <td class="text-right mono">{{ '{:,.0f}'.format(f.total_husks) }}</td>
+          <td class="text-right mono">{{ '{:,.1f}'.format(f.total_husks_adj) }}</td>
+          <td class="text-right mono">{{ f.total_collectors_used }}</td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(f.total_collector) }}</td>
+          <td class="text-right">
+            <span class="cph-pill {% if f.overall_cph <= overall_avg_cph %}cph-good{% elif f.overall_cph <= overall_avg_cph * 1.3 %}cph-warn{% else %}cph-bad{% endif %}">
+              GHS {{ '{:.4f}'.format(f.overall_cph) }}
+            </span>
+          </td>
+          <td class="text-right mono small">
+            {% if f.vs_avg < 0 %}<span class="positive">{{ '{:+.4f}'.format(f.vs_avg) }}</span>
+            {% elif f.vs_avg > 0 %}<span class="negative">+{{ '{:.4f}'.format(f.vs_avg) }}</span>
+            {% else %}<span class="muted">—</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr style="background:var(--surface);font-weight:600;border-top:2px solid var(--border);">
+          <td>Overall Average</td>
+          <td class="text-right mono">{{ all_metrics|length }}</td>
+          <td></td>
+          <td class="text-right mono">{{ '{:,.1f}'.format(total_husks_adj) }}</td>
+          <td></td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(total_collector) }}</td>
+          <td class="text-right"><span class="cph-pill cph-good">GHS {{ '{:.4f}'.format(overall_avg_cph) }}</span></td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Trend chart -->
+<div class="card">
+  <div class="card-title">📈 Collector Cost per Husk — Trend Over Time</div>
+  <p class="small muted mb-2">Downward trend = cost savings. Dashed red line = overall average.</p>
+  <div class="chart-container" style="height:300px;"><canvas id="trendChart"></canvas></div>
+</div>
+
+<!-- Per-harvest detail -->
+<div class="card">
+  <div class="card-title">📋 Per-Harvest Detail</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Farm</th>
+          <th class="text-right">Husks</th>
+          <th class="text-right">Adj. (+10%)</th>
+          <th class="text-right">Collectors</th>
+          <th class="text-right">Collector Pay</th>
+          <th class="text-right">Harvester Pay</th>
+          <th class="text-right">Cost / Husk (adj.)</th>
+          <th class="text-right">Cost / Collector</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in all_metrics %}
+        <tr>
+          <td class="small">{{ m.date }}</td>
+          <td class="small">{{ m.farm.replace('Palm Farm ','') }}</td>
+          <td class="text-right mono">{{ m.husks }}</td>
+          <td class="text-right mono">{{ m.husks_adj }}</td>
+          <td class="text-right mono">{{ m.num_collectors }}</td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(m.collector_pay) }}</td>
+          <td class="text-right mono muted">GHS {{ '{:,.2f}'.format(m.harvester_pay) }}</td>
+          <td class="text-right">
+            {% if m.cost_per_husk > 0 %}
+            <span class="cph-pill {% if m.cost_per_husk <= overall_avg_cph %}cph-good{% elif m.cost_per_husk <= overall_avg_cph * 1.3 %}cph-warn{% else %}cph-bad{% endif %}">
+              GHS {{ '{:.4f}'.format(m.cost_per_husk) }}
+            </span>
+            {% else %}<span class="muted small">—</span>{% endif %}
+          </td>
+          <td class="text-right mono small">
+            {% if m.cost_per_collector > 0 %}GHS {{ '{:.2f}'.format(m.cost_per_collector) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Planning Calculator -->
+<div class="card">
+  <div class="card-title">🧮 Collector Harvest Planning Calculator</div>
+  <p class="small muted mb-2">
+    Enter the expected husks to harvest. The calculator adds 10% for fallen fruits, then estimates
+    collectors needed and total cost using each farm's historical rate.
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;align-items:end;">
+    <div class="form-group">
+      <label>Farm (uses farm's historical rate)</label>
+      <select id="calcFarm" onchange="updateRate()">
+        <option value="avg" data-rate="{{ overall_avg_cph }}" data-collectors="1">— Overall Average —</option>
+        {% for f in farm_summary %}
+        <option value="{{ f.farm_id }}"
+                data-rate="{{ f.overall_cph }}"
+                data-collectors="{{ (f.total_collectors_used / f.harvests)|round(1) if f.harvests > 0 else 1 }}">
+          {{ f.farm.replace('Palm Farm ','') }} (GHS {{ '{:.4f}'.format(f.overall_cph) }}/husk)
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Expected Husks to Harvest</label>
+      <input type="number" id="calcHusks" placeholder="e.g. 200" min="1" oninput="calculate()">
+    </div>
+    <div class="form-group">
+      <label>Reference Rate (GHS/husk) — editable</label>
+      <input type="number" id="calcRate" step="0.0001" value="{{ overall_avg_cph }}" oninput="calculate()">
+    </div>
+  </div>
+
+  <div class="calc-result" id="calcResult">
+    <div style="font-weight:600;color:var(--green-dark);margin-bottom:10px;">📊 Planning Estimate</div>
+    <p class="small muted" id="calcFormula"></p>
+    <div class="calc-grid">
+      <div class="calc-kpi">
+        <div class="calc-kpi-val" id="outAdjHusks">—</div>
+        <div class="calc-kpi-lbl">Adjusted Husks (+10%)</div>
+      </div>
+      <div class="calc-kpi">
+        <div class="calc-kpi-val" id="outCollectors">—</div>
+        <div class="calc-kpi-lbl">Avg Collectors Needed</div>
+      </div>
+      <div class="calc-kpi">
+        <div class="calc-kpi-val" id="outCost">—</div>
+        <div class="calc-kpi-lbl">Estimated Collector Cost</div>
+      </div>
+      <div class="calc-kpi">
+        <div class="calc-kpi-val" id="outCostPerHusk">—</div>
+        <div class="calc-kpi-lbl">Cost per Husk (adj.)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  var farmTrends = {{ farm_trends | tojson }};
+  var overallAvg = {{ overall_avg_cph }};
+
+  // Collect all dates
+  var allDates = [];
+  Object.values(farmTrends).forEach(function(ft) {
+    ft.data.forEach(function(d) { if (allDates.indexOf(d.date) < 0) allDates.push(d.date); });
+  });
+  allDates.sort();
+
+  var colors = ['#2d6a4f','#f4a261','#e9c46a','#52b788','#e63946','#8ecae6'];
+  var datasets = [];
+  var i = 0;
+  Object.values(farmTrends).forEach(function(ft) {
+    if (!ft.data.length) return;
+    var dateMap = {};
+    ft.data.forEach(function(d) { dateMap[d.date] = d.cost_per_husk > 0 ? d.cost_per_husk : null; });
+    datasets.push({
+      label: ft.name.replace('Palm Farm ',''),
+      data: allDates.map(function(d) { return dateMap[d] !== undefined ? dateMap[d] : null; }),
+      borderColor: colors[i % colors.length],
+      backgroundColor: colors[i % colors.length] + '22',
+      borderWidth: 2, pointRadius: 5, tension: 0.3, spanGaps: false,
+    });
+    i++;
+  });
+  datasets.push({
+    label: 'Overall Average',
+    data: allDates.map(function() { return overallAvg; }),
+    borderColor: '#c0392b', borderWidth: 1.5,
+    borderDash: [6,3], pointRadius: 0, tension: 0,
+  });
+
+  var tc = document.getElementById('trendChart');
+  if (tc && allDates.length) {
+    new Chart(tc, {
+      type: 'line',
+      data: { labels: allDates, datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'top' } },
+        scales: {
+          x: { grid: { display: false }, ticks: { maxRotation: 45, font: { size: 10 } } },
+          y: { beginAtZero: true, grid: { color: '#eef4f0' },
+               title: { display: true, text: 'GHS per husk (adj.)' },
+               ticks: { callback: function(v) { return 'GHS ' + v.toFixed(4); } } }
+        }
+      }
+    });
+  }
+})();
+
+function updateRate() {
+  var sel = document.getElementById('calcFarm');
+  var opt = sel.options[sel.selectedIndex];
+  document.getElementById('calcRate').value = opt.dataset.rate;
+  calculate();
+}
+
+function calculate() {
+  var husks = parseFloat(document.getElementById('calcHusks').value) || 0;
+  var rate  = parseFloat(document.getElementById('calcRate').value)  || 0;
+  var sel   = document.getElementById('calcFarm');
+  var opt   = sel.options[sel.selectedIndex];
+  var avgCol= parseFloat(opt.dataset.collectors) || 1;
+
+  if (!husks || !rate) {
+    document.getElementById('calcResult').classList.remove('show');
+    return;
+  }
+
+  var adjHusks    = Math.round(husks * 1.10 * 10) / 10;
+  var estCost     = adjHusks * rate;
+  var collectors  = Math.max(1, Math.round(avgCol * adjHusks / 100));
+
+  document.getElementById('outAdjHusks').textContent    = adjHusks.toLocaleString();
+  document.getElementById('outCollectors').textContent  = collectors;
+  document.getElementById('outCost').textContent        = 'GHS ' + estCost.toLocaleString('en-GH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('outCostPerHusk').textContent = 'GHS ' + rate.toFixed(4);
+  document.getElementById('calcFormula').textContent    =
+    husks + ' husks × 1.10 = ' + adjHusks + ' adjusted husks. ' +
+    'GHS ' + rate.toFixed(4) + '/husk × ' + adjHusks + ' = GHS ' + estCost.toFixed(2) + ' estimated collector cost.';
+  document.getElementById('calcResult').classList.add('show');
+}
+</script>
 {% endblock %}

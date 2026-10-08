@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Add Investment{% endblock %}
+{% block page_title %}Investors{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('investors.index') }}">Investors</a>
+  <span class="breadcrumb-sep">›</span>
+  <a href="{{ url_for('investors.detail', investor_id=investor.id) }}">{{ investor.name }}</a>
+  <span class="breadcrumb-sep">›</span><span>Add Investment</span>
+</div>
+<div class="page-header">
+  <div><h2>Add Investment</h2>
+  <p>Expected return = Amount × (1 + Return% ÷ 100)</p></div>
+</div>
+<div class="card" style="max-width:640px;">
+  <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Investment Date</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+      <div class="form-group">
+        <label>Farm (optional)</label>
+        <select name="farm_id">
+          <option value="">— Not farm-specific —</option>
+          {% for f in farms %}
+          <option value="{{ f.id }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Investment Type</label>
+        <select name="investment_type">
+          <option>Cash</option><option>Equipment</option><option>Land</option><option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Amount (GHS)</label>
+        <input type="number" step="0.01" name="amount" placeholder="e.g. 5000" required oninput="calcReturn()">
+      </div>
+      <div class="form-group">
+        <label>Return % — interest/profit rate</label>
+        <input type="number" step="0.1" name="return_pct" id="returnPct" placeholder="e.g. 20" required oninput="calcReturn()">
+      </div>
+      <div class="form-group">
+        <label>Expected Return (Auto-calculated)</label>
+        <input type="text" id="expectedReturn" disabled style="background:var(--surface);font-weight:600;color:var(--green-mid);">
+      </div>
+      <div class="form-group">
+        <label>Expected Return Date</label>
+        <input type="date" name="return_date">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="Terms, conditions, etc."></textarea>
+      </div>
+    </div>
+    <p class="small muted mt-1">Formula: Amount × (1 + Return% ÷ 100) = Expected Return</p>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">💾 Save Investment</button>
+      <a href="{{ url_for('investors.detail', investor_id=investor.id) }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function calcReturn() {
+  var amt = parseFloat(document.querySelector('[name=amount]').value) || 0;
+  var pct = parseFloat(document.getElementById('returnPct').value) || 0;
+  var exp = amt * (1 + pct/100);
+  document.getElementById('expectedReturn').value = amt && pct
+    ? 'GHS ' + exp.toLocaleString('en-GH',{minimumFractionDigits:2}) + '  (' + amt.toLocaleString('en-GH',{minimumFractionDigits:2}) + ' + ' + (amt*pct/100).toLocaleString('en-GH',{minimumFractionDigits:2}) + ')'
+    : '';
+}
+</script>
+{% endblock %}

@@ -1,99 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}Investors{% endblock %}
-{% block page_title %}Investors{% endblock %}
-
-{% block content %}
-<div class="page-header">
-  <div>
-    <h2>Investors</h2>
-    <p>Track farm investors, their contributions, equity stakes, and returns.</p>
-  </div>
-  <a href="{{ url_for('investors.add') }}" class="btn btn-primary">+ Add Investor</a>
-</div>
-
-<!-- Summary -->
-<div class="stat-grid">
-  <div class="stat-card">
-    <div class="stat-label">Total Invested</div>
-    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_invested) }}</div>
-    <div class="stat-sub">Across {{ active_count }} investor{{ 's' if active_count != 1 else '' }}</div>
-  </div>
-  <div class="stat-card gold">
-    <div class="stat-label">Total Returned</div>
-    <div class="stat-value serif">GHS {{ '{:,.2f}'.format(total_returned) }}</div>
-    <div class="stat-sub">Paid back to investors</div>
-  </div>
-  <div class="stat-card {% if total_invested - total_returned > 0 %}red{% else %}gold{% endif %}">
-    <div class="stat-label">Outstanding Balance</div>
-    <div class="stat-value {% if total_invested - total_returned > 0 %}negative{% else %}positive{% endif %}">
-      GHS {{ '{:,.2f}'.format(total_invested - total_returned) }}
-    </div>
-    <div class="stat-sub">Still owed to investors</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Active Investments</div>
-    <div class="stat-value serif">{{ active_inv }}</div>
-    <div class="stat-sub">Currently active</div>
-  </div>
-</div>
-
-{% if investors %}
-<div class="card">
-  <div class="card-title">👥 All Investors</div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Investor</th>
-          <th>Location</th>
-          <th>Date Joined</th>
-          <th class="text-center">Investments</th>
-          <th class="text-right">Total Invested</th>
-          <th class="text-right">Total Returned</th>
-          <th class="text-right">Outstanding</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in investors %}
-        {% set outstanding = inv['total_invested'] - inv['total_returned'] %}
-        <tr>
-          <td style="font-weight:600;">
-            <a href="{{ url_for('investors.detail', investor_id=inv['id']) }}" style="color:var(--green-mid);">
-              {{ inv['name'] }}
-            </a>
-          </td>
-          <td class="muted small">{{ inv['location'] or '—' }}</td>
-          <td class="small muted">{{ inv['date_joined'] or '—' }}</td>
-          <td class="text-center">
-            <span class="badge badge-green">{{ inv['num_investments'] }}</span>
-          </td>
-          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(inv['total_invested']) }}</td>
-          <td class="text-right mono">GHS {{ '{:,.2f}'.format(inv['total_returned']) }}</td>
-          <td class="text-right mono {% if outstanding > 0 %}negative{% else %}positive{% endif %}">
-            GHS {{ '{:,.2f}'.format(outstanding) }}
-          </td>
-          <td>
-            <div class="flex gap-2">
-              <a href="{{ url_for('investors.detail', investor_id=inv['id']) }}" class="btn btn-sm btn-outline">View</a>
-              <form method="POST" action="{{ url_for('investors.delete', investor_id=inv['id']) }}"
-                    data-confirm="Delete {{ inv['name'] }}? This removes all their investment records.">
-                <button class="btn btn-sm btn-danger">Del</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% else %}
-<div class="card" style="text-align:center;padding:60px 20px;">
-  <div style="font-size:3rem;margin-bottom:16px;">🤝</div>
-  <h3 style="font-family:'Cormorant Garamond',serif;color:var(--green-dark);margin-bottom:8px;">No investors yet</h3>
-  <p class="muted" style="margin-bottom:20px;">Add your first investor to start tracking contributions and returns.</p>
-  <a href="{{ url_for('investors.add') }}" class="btn btn-primary">+ Add First Investor</a>
-</div>
-{% endif %}
-{% endblock %}
+{% block title %}Investors{% endblock %}{% block page_title %}Investors{% endblock %}
+{% block content %}{% include 'investors/_style.html' %}<div class="investor-ui">
+<div class="page-header"><div><h2>Investors</h2><p>Capital, returns and repayments · all amounts in GHS</p></div><a href="{{ url_for('investors.add') }}" class="btn btn-primary">+ Add investor</a></div>
+<div class="stat-grid">{% for label,value in [('Principal invested',total_invested),('Expected interest',total_expected-total_invested),('Total expected',total_expected),('Repaid',total_paid),('Outstanding',total_outstanding)] %}<div class="stat-card"><div class="stat-label">{{ label }}</div><div class="stat-value">{{ '{:,.2f}'.format(value) }}</div></div>{% endfor %}</div>
+<div class="card"><div class="investor-toolbar"><div><strong>{{ investor_rows|length }} investors</strong>{% if overdue_count %}<span class="badge badge-red">{{ overdue_count }} investments due</span>{% endif %}</div><input id="investorSearch" type="search" aria-label="Find investor" placeholder="Find an investor…"></div>
+<div class="table-wrap"><table><thead><tr><th>Investor</th><th class="money">Principal</th><th>Return %</th><th class="money">Expected interest</th><th class="money">Total expected</th><th>Next unpaid due date</th><th class="money">Repaid</th><th class="money">Outstanding</th><th></th></tr></thead><tbody>
+{% for i in investor_rows %}<tr class="investor-row" data-name="{{ i.name|lower }}"><td><a href="{{ url_for('investors.detail',investor_id=i.id) }}"><strong>{{ i.name }}</strong></a><div class="small muted">{{ i.count }} investment{{ 's' if i.count!=1 else '' }}</div></td><td class="money">{{ '{:,.2f}'.format(i.principal) }}</td><td>{% if i.rates|length==1 %}{{ '{:g}'.format(i.rates[0]) }}%{% elif i.rates %}{{ '{:g}'.format(i.rates[0]) }}–{{ '{:g}'.format(i.rates[-1]) }}%<div class="small muted">Varies by investment</div>{% else %}—{% endif %}</td><td class="money">{{ '{:,.2f}'.format(i.interest) }}</td><td class="money"><strong>{{ '{:,.2f}'.format(i.expected) }}</strong></td><td>{{ i.next_due or '—' }}{% if i.overdue %}<div class="small negative">{{ i.overdue }} due</div>{% endif %}{% if i.missing_dates %}<div class="small muted">{{ i.missing_dates }} undated</div>{% endif %}</td><td class="money">{{ '{:,.2f}'.format(i.paid) }}</td><td class="money">{{ '{:,.2f}'.format(i.outstanding) }}</td><td><a class="btn btn-sm btn-outline" href="{{ url_for('investors.detail',investor_id=i.id) }}">History →</a></td></tr>{% else %}<tr><td colspan="9" class="muted">No investors yet. Add an investor to start recording investments.</td></tr>{% endfor %}
+</tbody></table></div><p id="noInvestorMatch" hidden class="muted">No matching investor.</p></div>
+<details class="card"><summary>How totals work</summary><p class="small muted">Expected interest = principal × agreed return percentage. Total expected = principal + interest. Each investment keeps its own rate and due date. The next due date is the earliest unpaid obligation, including overdue dates. All recorded investments, including settled ones, are included in lifetime totals; repayments reduce outstanding balances.</p></details>
+</div>{% endblock %}
+{% block extra_js %}<script>document.getElementById('investorSearch').addEventListener('input',function(){const q=this.value.trim().toLowerCase();let count=0;document.querySelectorAll('.investor-row').forEach(row=>{row.hidden=!row.dataset.name.includes(q);if(!row.hidden)count++;});document.getElementById('noInvestorMatch').hidden=!q||count>0;});</script>{% endblock %}

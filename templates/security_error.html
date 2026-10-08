@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Please reload PFMS{% endblock %}
+{% block page_title %}Please reload PFMS{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Submission not saved</h2>
+  <p>{{ message }}</p>
+  <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary">Open dashboard</a>
+</div>
+{% endblock %}

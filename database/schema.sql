@@ -1,13 +1,6 @@
--- Palm Farm Management System (PFMS)
--- Database Schema
--- SQLite
+-- Current PFMS baseline. Applied through database/migrations.py.
 
-PRAGMA foreign_keys = ON;
-
--- ─────────────────────────────────────────
--- TABLE 1: farms
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS farms (
+CREATE TABLE farms (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,
     location        TEXT,
@@ -20,10 +13,7 @@ CREATE TABLE IF NOT EXISTS farms (
     created_at      DATE DEFAULT (DATE('now'))
 );
 
--- ─────────────────────────────────────────
--- TABLE 2: activities
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS activities (
+CREATE TABLE activities (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id         INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     date            DATE NOT NULL,
@@ -40,10 +30,7 @@ CREATE TABLE IF NOT EXISTS activities (
     notes           TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 3: harvests
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS harvests (
+CREATE TABLE harvests (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id             INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     activity_id         INTEGER REFERENCES activities(id) ON DELETE SET NULL,
@@ -53,12 +40,9 @@ CREATE TABLE IF NOT EXISTS harvests (
     num_labourers       INTEGER DEFAULT 0,
     harvesting_cost     REAL DEFAULT 0,
     notes               TEXT
-);
+, harvester_pay REAL DEFAULT 0, collector_pay REAL DEFAULT 0, num_collectors INTEGER DEFAULT 0, gallons_produced REAL DEFAULT 0, price_per_gallon REAL DEFAULT 0, oil_income REAL DEFAULT 0, transport_mode TEXT DEFAULT NULL, driver_pay REAL DEFAULT 0, fuel_cost REAL DEFAULT 0, tricycle_rent REAL DEFAULT 0, gallons_sold REAL DEFAULT 0, husks_processed INTEGER DEFAULT NULL, gallons_sold_price REAL DEFAULT 0, gallons_sold_income REAL DEFAULT 0, threshing_cost REAL DEFAULT 0, processing_date TEXT, processing_run_id INTEGER REFERENCES processing_runs(id) ON DELETE SET NULL);
 
--- ─────────────────────────────────────────
--- TABLE 4: pruning_cycles
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS pruning_cycles (
+CREATE TABLE pruning_cycles (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id             INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     cycle_start_date    DATE NOT NULL,
@@ -68,10 +52,7 @@ CREATE TABLE IF NOT EXISTS pruning_cycles (
     next_due_date       DATE
 );
 
--- ─────────────────────────────────────────
--- TABLE 5: pruning_batches
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS pruning_batches (
+CREATE TABLE pruning_batches (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id         INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     activity_id     INTEGER REFERENCES activities(id) ON DELETE SET NULL,
@@ -83,10 +64,7 @@ CREATE TABLE IF NOT EXISTS pruning_batches (
     notes           TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 6: farm_income
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS farm_income (
+CREATE TABLE farm_income (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id         INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     date            DATE NOT NULL,
@@ -98,10 +76,7 @@ CREATE TABLE IF NOT EXISTS farm_income (
     notes           TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 7: farm_expenses
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS farm_expenses (
+CREATE TABLE farm_expenses (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     farm_id         INTEGER REFERENCES farms(id) ON DELETE CASCADE,
     date            DATE NOT NULL,
@@ -111,52 +86,7 @@ CREATE TABLE IF NOT EXISTS farm_expenses (
     notes           TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 8: processing_runs
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS processing_runs (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    date                    DATE NOT NULL,
-    own_farms_bunches       INTEGER DEFAULT 0,
-    outside_farmers_bunches INTEGER DEFAULT 0,
-    total_output_litres     REAL DEFAULT 0,
-    total_output_gallons    REAL GENERATED ALWAYS AS (total_output_litres / 25.0) STORED,
-    gross_revenue           REAL GENERATED ALWAYS AS ((total_output_litres / 25.0) * 40.0) STORED,
-    electricity_cost        REAL GENERATED ALWAYS AS (((total_output_litres / 25.0) / 20.0) * 120.0) STORED,
-    net_revenue             REAL GENERATED ALWAYS AS (
-                                ((total_output_litres / 25.0) * 40.0) -
-                                (((total_output_litres / 25.0) / 20.0) * 120.0)
-                            ) STORED,
-    operator_pay            REAL GENERATED ALWAYS AS (
-                                (
-                                    ((total_output_litres / 25.0) * 40.0) -
-                                    (((total_output_litres / 25.0) / 20.0) * 120.0)
-                                ) * 0.30
-                            ) STORED,
-    company_revenue         REAL GENERATED ALWAYS AS (
-                                (
-                                    ((total_output_litres / 25.0) * 40.0) -
-                                    (((total_output_litres / 25.0) / 20.0) * 120.0)
-                                ) * 0.70
-                            ) STORED,
-    outside_farmer_fees     REAL DEFAULT 0,
-    notes                   TEXT
-);
-
--- ─────────────────────────────────────────
--- TABLE 9: processing_run_farms
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS processing_run_farms (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id              INTEGER REFERENCES processing_runs(id) ON DELETE CASCADE,
-    farm_id             INTEGER REFERENCES farms(id) ON DELETE CASCADE,
-    bunches_contributed INTEGER DEFAULT 0
-);
-
--- ─────────────────────────────────────────
--- TABLE 10: plant_expenses
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS plant_expenses (
+CREATE TABLE plant_expenses (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     date        DATE NOT NULL,
     category    TEXT CHECK(category IN ('Maintenance','Casual Labour','Consumables','Other')),
@@ -165,10 +95,7 @@ CREATE TABLE IF NOT EXISTS plant_expenses (
     notes       TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 11: transport_logs
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS transport_logs (
+CREATE TABLE transport_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     date            DATE NOT NULL,
     transport_type  TEXT CHECK(transport_type IN ('Pickup','Tricycle')),
@@ -178,12 +105,9 @@ CREATE TABLE IF NOT EXISTS transport_logs (
     rental_cost     REAL DEFAULT 0,
     total_cost      REAL GENERATED ALWAYS AS (fuel_cost + driver_pay + rental_cost) STORED,
     notes           TEXT
-);
+, harvest_id INTEGER REFERENCES harvests(id) ON DELETE CASCADE);
 
--- ─────────────────────────────────────────
--- TABLE 12: pickup_maintenance
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS pickup_maintenance (
+CREATE TABLE pickup_maintenance (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     date        DATE NOT NULL,
     description TEXT,
@@ -191,10 +115,7 @@ CREATE TABLE IF NOT EXISTS pickup_maintenance (
     notes       TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 13: price_log
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS price_log (
+CREATE TABLE price_log (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     date                DATE NOT NULL,
     product             TEXT CHECK(product IN ('FFB','Palm Oil')),
@@ -206,10 +127,7 @@ CREATE TABLE IF NOT EXISTS price_log (
     notes               TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 14: outside_farmers
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS outside_farmers (
+CREATE TABLE outside_farmers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
     phone       TEXT,
@@ -217,38 +135,98 @@ CREATE TABLE IF NOT EXISTS outside_farmers (
     notes       TEXT
 );
 
--- ─────────────────────────────────────────
--- SEED DATA: The 6 farms
--- ─────────────────────────────────────────
-INSERT OR IGNORE INTO farms (id, name, location, constituency, size_acres, crop_type, status, total_trees, notes) VALUES
-(1, 'Cashew Farm',   'Kuren',        'Dormaa Central', 7.0,  'Cashew',   'Active',      0,    'Cashew farm — activity tracking only'),
-(2, 'Palm Farm A',   'Nkrankwanta',  'Dormaa West',    10.0, 'Oil Palm', 'Inactive',    0,    'Needs revival investment — not producing'),
-(3, 'Palm Farm B',   'Nkrankwanta',  'Dormaa West',    10.5, 'Oil Palm', 'Development', 0,    'Under development — planting phase'),
-(4, 'Palm Farm C',   'Nkrankwanta',  'Dormaa West',    12.0, 'Oil Palm', 'Active',      0,    'Active producing farm'),
-(5, 'Palm Farm D',   'Nkrankwanta',  'Dormaa West',    10.0, 'Oil Palm', 'Active',      0,    'Active producing farm'),
-(6, 'Palm Farm E',   'Nkrankwanta',  'Dormaa West',    10.0, 'Oil Palm', 'Active',      0,    'Active producing farm');
+CREATE TABLE storage (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            date_updated     DATE NOT NULL,
+            gallons_in_stock REAL DEFAULT 0,
+            price_per_gallon REAL DEFAULT 0,
+            total_value      REAL DEFAULT 0,
+            notes            TEXT
+        );
 
--- ─────────────────────────────────────────
--- TABLE 15: storage (current inventory snapshot)
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS storage (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    date_updated     DATE NOT NULL,
-    gallons_in_stock REAL DEFAULT 0,
-    price_per_gallon REAL DEFAULT 0,
-    total_value      REAL DEFAULT 0,
-    notes            TEXT
+CREATE TABLE processing_runs (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    date                        DATE NOT NULL,
+    own_farms_litres            REAL DEFAULT 0,
+    own_farms_gallons           REAL DEFAULT 0,
+    own_farms_bunches           INTEGER DEFAULT 0,
+    outside_farmers_litres      REAL DEFAULT 0,
+    outside_farmers_gallons     REAL DEFAULT 0,
+    outside_farmers_bunches     INTEGER DEFAULT 0,
+    total_output_litres         REAL DEFAULT 0,
+    total_output_gallons        REAL DEFAULT 0,
+    gross_revenue               REAL DEFAULT 0,
+    outside_farmer_fees         REAL DEFAULT 0,
+    electricity_cost            REAL DEFAULT 0,
+    net_revenue                 REAL DEFAULT 0,
+    operator_pay                REAL DEFAULT 0,
+    company_revenue             REAL DEFAULT 0,
+    cash_collected              REAL DEFAULT 0,
+    cash_outstanding            REAL DEFAULT 0,
+    notes                       TEXT
 );
 
--- ─────────────────────────────────────────
--- TABLE 16: storage_transactions
--- ─────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS storage_transactions (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    date             DATE NOT NULL,
-    transaction_type TEXT CHECK(transaction_type IN ('Addition','Removal','Revaluation')),
-    gallons          REAL DEFAULT 0,
+CREATE TABLE investors (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        phone       TEXT,
+        email       TEXT,
+        location    TEXT,
+        notes       TEXT,
+        date_joined DATE
+    );
+
+CREATE TABLE investments (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        investor_id     INTEGER NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
+        farm_id         INTEGER REFERENCES farms(id),
+        date            DATE NOT NULL,
+        amount          REAL NOT NULL DEFAULT 0,
+        investment_type TEXT DEFAULT 'Cash',
+        equity_pct      REAL DEFAULT 0,
+        expected_return REAL DEFAULT 0,
+        return_date     DATE,
+        status          TEXT DEFAULT 'Active',
+        notes           TEXT
+    , return_pct REAL DEFAULT 0);
+
+CREATE TABLE investor_returns (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        investor_id   INTEGER NOT NULL REFERENCES investors(id),
+        investment_id INTEGER REFERENCES investments(id),
+        date          DATE NOT NULL,
+        amount        REAL DEFAULT 0,
+        notes         TEXT
+    );
+
+CREATE TABLE "storage_transactions" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    transaction_type TEXT NOT NULL,
+    gallons REAL DEFAULT 0,
     price_per_gallon REAL DEFAULT 0,
-    reason           TEXT,
-    notes            TEXT
-);
+    reason TEXT,
+    notes TEXT,
+    farm_id INTEGER,
+    fresh_gallons REAL DEFAULT 0,
+    soap_gallons REAL DEFAULT 0,
+    seller TEXT,
+    buyer TEXT,
+    total_amount REAL DEFAULT 0
+, legacy_harvest_id INTEGER, quality_type TEXT NOT NULL DEFAULT 'Unassessed' CHECK(quality_type IN ('Fresh','Soap','Unassessed')));
+
+CREATE TABLE "processing_run_farms" (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id INTEGER REFERENCES processing_runs(id) ON DELETE CASCADE,
+        farm_id INTEGER REFERENCES farms(id) ON DELETE CASCADE,
+        bunches_contributed INTEGER DEFAULT 0,
+        gallons_contributed REAL CHECK(gallons_contributed >= 0)
+    );
+
+CREATE TABLE pfms_migrations (name TEXT PRIMARY KEY);
+
+CREATE TABLE harvest_sales_archive (
+        harvest_id INTEGER PRIMARY KEY, original_record TEXT NOT NULL,
+        review_note TEXT NOT NULL, reviewed INTEGER NOT NULL DEFAULT 0);
+
+CREATE UNIQUE INDEX storage_legacy_harvest ON storage_transactions(legacy_harvest_id) WHERE legacy_harvest_id IS NOT NULL;

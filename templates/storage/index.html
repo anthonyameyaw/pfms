@@ -6,88 +6,76 @@
 <div class="page-header">
   <div>
     <h2>Palm Oil Storage</h2>
-    <p>Total inventory derived from gallons produced minus gallons sold, per farm.</p>
+    <p>One shared oil pool. Each gallon means 25 litres. Farm contributions track production, not whose oil was sold.</p>
   </div>
-  <div class="flex gap-2">
-    <a href="{{ url_for('storage.log_quality') }}" class="btn btn-primary">🌿 Log Fresh / Soap Split</a>
-    <a href="{{ url_for('storage.revalue') }}"     class="btn btn-gold">💱 Update Price</a>
+  <div class="flex gap-2" style="flex-wrap:wrap;">
+    <a href="{{ url_for('storage.log_purchase') }}" class="btn btn-gold">🛒 Log Purchase</a>
+    <a href="{{ url_for('storage.log_sale') }}"     class="btn btn-primary">💰 Log Sale</a>
+    <a href="{{ url_for('storage.log_quality') }}"  class="btn btn-outline">🌿 Quality Split</a>
+    <a href="{{ url_for('storage.revalue') }}"       class="btn btn-outline">💱 Update Price</a>
   </div>
 </div>
 
 <!-- Summary cards -->
 <div class="stat-grid">
   <div class="stat-card gold">
-    <div class="stat-label">Total Gallons in Storage</div>
+    <div class="stat-label">Total Gallons in Stock</div>
     <div class="stat-value serif">{{ '{:,.2f}'.format(total_stock) }}</div>
-    <div class="stat-sub">gallons currently held</div>
+    <div class="stat-sub">produced + purchased − sold</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Price per Gallon</div>
-    {% if current_price > 0 %}
-    <div class="stat-value serif">GHS {{ '{:,.2f}'.format(current_price) }}</div>
-    {% else %}
-    <div class="stat-value serif" style="font-size:1rem;color:var(--ink-soft);">Not set</div>
-    {% endif %}
-    <div class="stat-sub"><a href="{{ url_for('storage.revalue') }}" style="color:var(--gold);">Update price →</a></div>
-  </div>
-  <div class="stat-card {% if current_value > 0 %}gold{% endif %}">
-    <div class="stat-label">Total Stock Value</div>
+    <div class="stat-label">Stock Value</div>
     <div class="stat-value {% if current_value > 0 %}positive{% else %}serif{% endif %}">
       GHS {{ '{:,.2f}'.format(current_value) }}
     </div>
-    <div class="stat-sub">{{ '{:,.2f}'.format(total_stock) }} gal × GHS {{ '{:,.2f}'.format(current_price) }}</div>
+    <div class="stat-sub">@ GHS {{ '{:.2f}'.format(current_price) }}/gal
+      <a href="{{ url_for('storage.revalue') }}" style="color:var(--gold);margin-left:4px;">update →</a>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Total Oil Revenue</div>
+    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_oil_revenue) }}</div>
+    <div class="stat-sub">all pooled oil sales</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Total Purchased</div>
+    <div class="stat-value negative">{{ '{:,.2f}'.format(purchase_stats.total_gal or 0) }} gal</div>
+    <div class="stat-sub">GHS {{ '{:,.2f}'.format(purchase_stats.total_spent or 0) }} spent · {{ purchase_stats.count or 0 }} orders</div>
   </div>
 </div>
 
-<!-- Fresh / Soap split -->
+<!-- Purchases section -->
 <div class="card">
-  <div class="card-title">🌿 Oil Quality Split — Latest Assessment</div>
-  {% if fresh_total > 0 or soap_total > 0 %}
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
-    <div class="kpi-tile good">
-      <div class="kpi-tile-label">Fresh Oil Palm</div>
-      <div class="kpi-tile-value">{{ '{:,.2f}'.format(fresh_total) }} gal</div>
-      <div class="kpi-tile-note">Human consumption</div>
-    </div>
-    <div class="kpi-tile warn">
-      <div class="kpi-tile-label">Unfresh Oil Palm (Soap)</div>
-      <div class="kpi-tile-value">{{ '{:,.2f}'.format(soap_total) }} gal</div>
-      <div class="kpi-tile-note">For soap production</div>
-    </div>
-    <div class="kpi-tile good">
-      <div class="kpi-tile-label">Total Assessed</div>
-      <div class="kpi-tile-value">{{ '{:,.2f}'.format(fresh_total + soap_total) }} gal</div>
-      <div class="kpi-tile-note">
-        {% if fresh_total + soap_total > 0 %}
-        {{ '{:.0f}'.format(fresh_total / (fresh_total + soap_total) * 100) }}% fresh
-        {% endif %}
-      </div>
-    </div>
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>🛒 Oil Purchases</span>
+    <a href="{{ url_for('storage.log_purchase') }}" class="btn btn-sm btn-gold">+ Log Purchase</a>
   </div>
-  {% if quality_logs %}
+  {% if purchases %}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>Date</th>
-          <th class="text-right">Fresh Gallons</th>
-          <th class="text-right">Soap Gallons</th>
-          <th class="text-right">Total</th>
+          <th>Seller / Supplier</th>
+          <th class="text-right">Gallons</th>
+          <th class="text-right">Price / Gal</th>
+          <th class="text-right">Total Paid</th>
           <th>Notes</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for q in quality_logs %}
+        {% for p in purchases %}
         <tr>
-          <td>{{ q['date'] }}</td>
-          <td class="text-right mono positive">{{ '{:,.2f}'.format(q['fresh_gallons'] or 0) }}</td>
-          <td class="text-right mono" style="color:var(--amber);">{{ '{:,.2f}'.format(q['soap_gallons'] or 0) }}</td>
-          <td class="text-right mono bold">{{ '{:,.2f}'.format((q['fresh_gallons'] or 0) + (q['soap_gallons'] or 0)) }}</td>
-          <td class="small muted">{{ q['notes'] or '—' }}</td>
+          <td>{{ p['date'] }}</td>
+          <td>{{ p['seller'] or '—' }}</td>
+          <td class="text-right mono bold">{{ '{:,.2f}'.format(p['gallons'] or 0) }}</td>
+          <td class="text-right mono">GHS {{ '{:.2f}'.format(p['price_per_gallon'] or 0) }}</td>
+          <td class="text-right mono negative">GHS {{ '{:,.2f}'.format(p['total_amount'] or 0) }}</td>
+          <td class="small muted">{{ p['notes'] or '—' }}<br><span class="small muted">{{ 'Not yet assessed' if p['quality_type']=='Unassessed' else p['quality_type'] }}</span></td>
           <td>
-            <form method="POST" action="{{ url_for('storage.delete_transaction', tx_id=q['id']) }}"
-                  data-confirm="Delete this quality log?">
+            <form method="POST" action="{{ url_for('storage.delete_transaction', tx_id=p['id']) }}" data-confirm="Delete this purchase?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-sm btn-danger">Del</button>
             </form>
           </td>
@@ -96,115 +84,161 @@
       </tbody>
     </table>
   </div>
-  {% endif %}
   {% else %}
-  <div style="text-align:center;padding:28px 0;">
-    <p class="muted">No quality assessments logged yet.</p>
-    <a href="{{ url_for('storage.log_quality') }}" class="btn btn-primary" style="margin-top:12px;">+ Log Fresh / Soap Split</a>
-  </div>
+  <p class="muted" style="padding:20px 0;text-align:center;">No purchases recorded yet. <a href="{{ url_for('storage.log_purchase') }}" style="color:var(--green-mid);">Log first purchase →</a></p>
   {% endif %}
 </div>
 
-<!-- Per-farm stock -->
+<!-- Sales section -->
 <div class="card">
-  <div class="card-title">🌴 Storage by Farm</div>
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>💰 Pooled Oil Sales</span>
+    <a href="{{ url_for('storage.log_sale') }}" class="btn btn-sm btn-primary">+ Log Sale</a>
+  </div>
+  {% if sales %}
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Farm</th>
-          <th>Status</th>
-          <th class="text-right">Total Produced (gal)</th>
-          <th class="text-right">Total Sold (gal)</th>
-          <th class="text-right">In Storage (gal)</th>
-          <th class="text-right">Stock Value</th>
-          <th class="text-right">Share %</th>
+          <th>Date</th>
+          <th>Buyer</th>
+          <th class="text-right">Gallons</th>
+          <th class="text-right">Price / Gal</th>
+          <th class="text-right">Total Revenue</th>
+          <th>Notes</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for f in farm_stocks %}
+        {% for s in sales %}
         <tr>
-          <td style="font-weight:500;">
-            <a href="{{ url_for('farms.detail', farm_id=f.id) }}" style="color:var(--green-mid);">{{ f.name }}</a>
-          </td>
+          <td>{{ s['date'] }}</td>
+          <td>{{ s['buyer'] or '—' }}</td>
+          <td class="text-right mono bold">{{ '{:,.2f}'.format(s['gallons'] or 0) }}</td>
+          <td class="text-right mono">GHS {{ '{:.2f}'.format(s['price_per_gallon'] or 0) }}</td>
+          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(s['total_amount'] or 0) }}</td>
+          <td class="small muted">{{ s['notes'] or '—' }}<br><span class="small muted">{{ 'Not yet assessed' if s['quality_type']=='Unassessed' else s['quality_type'] }}</span></td>
           <td>
-            <span class="badge {% if f.status=='Active' %}badge-green{% elif f.status=='Inactive' %}badge-red{% else %}badge-amber{% endif %}">
-              {{ f.status }}
-            </span>
-          </td>
-          <td class="text-right mono">{{ '{:,.2f}'.format(f.produced) }}</td>
-          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.sold) }}</td>
-          <td class="text-right mono bold {% if f.in_storage > 0 %}positive{% endif %}">
-            {{ '{:,.2f}'.format(f.in_storage) }}
-          </td>
-          <td class="text-right mono">
-            {% if current_price > 0 and f.in_storage > 0 %}
-            GHS {{ '{:,.2f}'.format(f.in_storage * current_price) }}
-            {% else %}—{% endif %}
-          </td>
-          <td class="text-right">
-            {% if f.in_storage > 0 %}
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div class="progress-wrap" style="flex:1;min-width:60px;">
-                <div class="progress-bar" style="width:{{ f.pct }}%;"></div>
-              </div>
-              <span class="mono small">{{ f.pct }}%</span>
-            </div>
-            {% else %}
-            <span class="muted small">0%</span>
-            {% endif %}
+            <form method="POST" action="{{ url_for('storage.delete_transaction', tx_id=s['id']) }}" data-confirm="Delete this sale?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-danger">Del</button>
+            </form>
           </td>
         </tr>
         {% endfor %}
-        <tr style="background:var(--surface);font-weight:600;border-top:2px solid var(--border);">
-          <td colspan="2">Total</td>
-          <td class="text-right mono">{{ '{:,.2f}'.format(farm_stocks|sum(attribute='produced')) }}</td>
-          <td class="text-right mono muted">{{ '{:,.2f}'.format(farm_stocks|sum(attribute='sold')) }}</td>
-          <td class="text-right mono positive">{{ '{:,.2f}'.format(total_stock) }}</td>
-          <td class="text-right mono">GHS {{ '{:,.2f}'.format(current_value) }}</td>
-          <td class="text-right mono">100%</td>
+        <tr style="font-weight:600;background:var(--surface);border-top:2px solid var(--border);">
+          <td colspan="4">Total Storage Sales</td>
+          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(sale_stats.total_revenue or 0) }}</td>
+          <td colspan="2"></td>
         </tr>
       </tbody>
     </table>
   </div>
+  {% else %}
+  <p class="muted" style="padding:20px 0;text-align:center;">No storage sales yet. <a href="{{ url_for('storage.log_sale') }}" style="color:var(--green-mid);">Log a sale →</a></p>
+  {% endif %}
 </div>
 
-<!-- Price history chart -->
+<div class="card">
+  <div class="card-title">🌴 Each Farm's Production Contribution</div>
+  <p class="small muted">Cumulative oil added from processed harvests. Older processing dates were not recorded; historical stock checks use their harvest dates until corrected. These are production contributions, not remaining stock by farm. Sales reduce the shared pool; purchased oil is shown separately above. One gallon is 25 litres.</p>
+  <table><thead><tr><th>Farm</th><th class="text-right">Gallons contributed</th><th class="text-right">Share of farm production</th></tr></thead>
+  <tbody>{% for f in farm_stocks %}<tr><td><a href="{{ url_for('farms.detail',farm_id=f.id) }}">{{ f.name }}</a></td><td class="text-right mono">{{ '{:,.2f}'.format(f.produced) }}</td><td class="text-right mono">{{ f.pct }}%</td></tr>{% endfor %}
+  <tr><td>Total farm production</td><td class="text-right mono">{{ '{:,.2f}'.format(farm_stocks|sum(attribute='produced')) }}</td><td></td></tr></tbody></table>
+</div>
+{% if review_items %}
+<div class="card"><details><summary>Historical sale dates to review ({{ review_items|length }})</summary>
+<p class="small muted">The historical sales below are already included in Pooled Oil Sales, revenue and stock deductions. Only their dates need checking: the old records used harvest dates. Masu’s GHS 3,150 was confirmed as an unsold valuation and is excluded from sales.</p>
+<table><thead><tr><th>Original date</th><th>Harvest reference</th><th>GHS</th><th>Review note</th></tr></thead><tbody>
+{% for item in review_items %}<tr><td>{{ item.date }}</td><td>{{ item.harvest_id }}</td><td>{{ '{:,.2f}'.format(item.amount) }}</td><td>{{ item.note }}</td></tr>{% endfor %}
+</tbody></table></details></div>
+{% endif %}
+
+<div class="card">
+  <div class="card-title">Oil sales by type</div>
+  <table><thead><tr><th>Oil type</th><th class="text-right">Gallons sold</th><th class="text-right">Revenue (GHS)</th></tr></thead>
+  <tbody>{% for kind, label in [('Fresh','Oil for food'),('Soap','Oil for soap'),('Unassessed','Type not recorded')] %}
+    <tr><td>{{ label }}</td><td class="text-right mono">{{ '{:,.2f}'.format(sales_by_quality[kind].gallons) }}</td><td class="text-right mono">{{ '{:,.2f}'.format(sales_by_quality[kind].revenue) }}</td></tr>
+  {% endfor %}</tbody></table>
+  <p class="small muted">Historical sales stay under Type not recorded until their type is known.</p>
+</div>
+
+<!-- Quality split -->
+<div class="card">
+  <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>🌿 Oil Quality Split</span>
+    <a href="{{ url_for('storage.log_quality') }}" class="btn btn-sm btn-outline">+ Log Assessment</a>
+  </div>
+  <p class="small muted">The assessed balances below include only oil whose type has been recorded. Sales identify the oil leaving; they do not establish the split of the remaining unassessed oil. A full assessment replaces the split.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:16px;">
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">🌿 Assessed oil for food</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(fresh_total) }} gal</div>
+    </div>
+    <div class="kpi-tile warn">
+      <div class="kpi-tile-label">🧼 Assessed oil for soap</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(soap_total) }} gal</div>
+    </div>
+    <div class="kpi-tile">
+      <div class="kpi-tile-label">Not yet assessed</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(unassessed_total) }} gallons</div>
+    </div>
+  </div>
+  {% if quality_logs %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th class="text-right">Fresh (gal)</th><th class="text-right">Soap (gal)</th><th>Notes</th><th></th></tr></thead>
+      <tbody>
+        {% for q in quality_logs %}
+        <tr>
+          <td>{{ q['date'] }}{% if q['transaction_type']=='Legacy assessment' %}<br><span class="small muted">Historical only — not used for current split</span>{% endif %}</td>
+          <td class="text-right mono positive">{{ '{:,.2f}'.format(q['fresh_gallons'] or 0) }}</td>
+          <td class="text-right mono" style="color:var(--amber);">{{ '{:,.2f}'.format(q['soap_gallons'] or 0) }}</td>
+          <td class="small muted">{{ q['notes'] or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('storage.delete_transaction', tx_id=q['id']) }}" data-confirm="Delete this entry?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-danger">Del</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+</div>
+
+<!-- Price history -->
 {% if value_history %}
 <div class="card">
   <div class="card-title">📈 Price per Gallon History</div>
   <div class="chart-container" style="height:200px;"><canvas id="priceChart"></canvas></div>
 </div>
 {% endif %}
-
 {% endblock %}
 
 {% block extra_js %}
 {% if value_history %}
 <script>
-const vh = {{ value_history | tojson }};
-new Chart(document.getElementById('priceChart'), {
-  type: 'line',
-  data: {
-    labels: vh.map(d => d.date),
-    datasets: [{
-      label: 'Price per Gallon (GHS)',
-      data: vh.map(d => d.price_per_gallon),
-      borderColor: '#c8922a',
-      backgroundColor: 'rgba(200,146,42,0.1)',
-      fill: true, tension: 0.3, pointRadius: 5,
-    }]
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { display: false } },
-      y: { beginAtZero: false, grid: { color: '#eef4f0' },
-           ticks: { callback: v => 'GHS ' + v.toFixed(2) } }
-    }
-  }
-});
+(function() {
+  var vh = {{ value_history | tojson }};
+  var tc = document.getElementById('priceChart');
+  if (!tc || !vh.length) return;
+  new Chart(tc, {
+    type: 'line',
+    data: {
+      labels: vh.map(function(d){return d.date;}),
+      datasets:[{ label:'Price/Gal (GHS)', data:vh.map(function(d){return d.price_per_gallon;}),
+        borderColor:'#c8922a', backgroundColor:'rgba(200,146,42,0.1)',
+        fill:true, tension:0.3, pointRadius:5 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{ x:{grid:{display:false}}, y:{beginAtZero:false, grid:{color:'#eef4f0'},
+        ticks:{callback:function(v){return 'GHS '+v.toFixed(2);}}} } }
+  });
+})();
 </script>
 {% endif %}
 {% endblock %}

@@ -5,70 +5,85 @@
 <div class="breadcrumb">
   <a href="{{ url_for('investors.index') }}">Investors</a>
   <span class="breadcrumb-sep">›</span>
-  <a href="{{ url_for('investors.detail', investor_id=inv['investor_id']) }}">{{ inv['investor_name'] }}</a>
-  <span class="breadcrumb-sep">›</span>
-  <span>Edit Investment</span>
+  <a href="{{ url_for('investors.detail', investor_id=inv.investor_id) }}">{{ inv.investor_name }}</a>
+  <span class="breadcrumb-sep">›</span><span>Edit Investment</span>
 </div>
 <div class="page-header">
-  <div><h2>Edit Investment</h2><p>{{ inv['investor_name'] }}</p></div>
+  <div><h2>Edit Investment</h2>
+  <p>Update investment details. Expected return = Amount × (1 + Return% ÷ 100)</p></div>
 </div>
-<div class="card" style="max-width:780px;">
+<div class="card" style="max-width:640px;">
   <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-grid">
       <div class="form-group">
-        <label>Date</label>
-        <input type="date" name="date" value="{{ inv['date'] }}" required>
+        <label>Investment Date</label>
+        <input type="date" name="date" value="{{ inv.date }}" required>
       </div>
       <div class="form-group">
-        <label>Amount (GHS)</label>
-        <input type="number" step="0.01" name="amount" value="{{ inv['amount'] }}" required>
+        <label>Farm (optional)</label>
+        <select name="farm_id">
+          <option value="">— Not farm-specific —</option>
+          {% for f in farms %}
+          <option value="{{ f.id }}" {% if f.id == inv.farm_id %}selected{% endif %}>{{ f.name }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="form-group">
         <label>Investment Type</label>
         <select name="investment_type">
-          {% for t in investment_types %}
-          <option {% if t == inv['investment_type'] %}selected{% endif %}>{{ t }}</option>
+          {% for t in ['Cash','Equipment','Land','Other'] %}
+          <option {% if t == inv.investment_type %}selected{% endif %}>{{ t }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label>Farm</label>
-        <select name="farm_id">
-          <option value="">All Farms / General</option>
-          {% for f in farms %}
-          <option value="{{ f['id'] }}" {% if f['id'] == inv['farm_id'] %}selected{% endif %}>{{ f['name'] }}</option>
-          {% endfor %}
-        </select>
+        <label>Amount (GHS)</label>
+        <input type="number" step="0.01" name="amount" value="{{ inv.amount }}" required oninput="calcReturn()">
       </div>
       <div class="form-group">
-        <label>Equity %</label>
-        <input type="number" step="0.1" name="equity_pct" value="{{ inv['equity_pct'] or '' }}">
+        <label>Return %</label>
+        <input type="number" step="0.1" name="return_pct" id="returnPct" value="{{ inv.return_pct }}" required oninput="calcReturn()">
       </div>
       <div class="form-group">
-        <label>Expected Return (GHS)</label>
-        <input type="number" step="0.01" name="expected_return" value="{{ inv['expected_return'] or '' }}">
+        <label>Expected Return (Auto-calculated)</label>
+        <input type="text" id="expectedReturn" disabled style="background:var(--surface);font-weight:600;color:var(--green-mid);">
       </div>
       <div class="form-group">
         <label>Expected Return Date</label>
-        <input type="date" name="return_date" value="{{ inv['return_date'] or '' }}">
+        <input type="date" name="return_date" value="{{ inv.return_date or '' }}">
       </div>
       <div class="form-group">
         <label>Status</label>
         <select name="status">
-          {% for s in statuses %}
-          <option {% if s == inv['status'] %}selected{% endif %}>{{ s }}</option>
+          {% for s in ['Active','Defaulted'] %}
+          <option {% if s == inv.status or (s == 'Active' and inv.status == 'Completed') %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
+        <p class="small muted">Completion is automatic when the expected amount is fully repaid. An unpaid balance stays active or defaulted.</p>
       </div>
       <div class="form-group full">
         <label>Notes</label>
-        <input name="notes" value="{{ inv['notes'] or '' }}">
+        <textarea name="notes">{{ inv.notes or '' }}</textarea>
       </div>
     </div>
     <div class="flex gap-2 mt-2">
-      <button type="submit" class="btn btn-primary">💾 Update Investment</button>
-      <a href="{{ url_for('investors.detail', investor_id=inv['investor_id']) }}" class="btn btn-outline">Cancel</a>
+      <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+      <a href="{{ url_for('investors.detail', investor_id=inv.investor_id) }}" class="btn btn-outline">Cancel</a>
     </div>
   </form>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function calcReturn() {
+  var amt = parseFloat(document.querySelector('[name=amount]').value) || 0;
+  var pct = parseFloat(document.getElementById('returnPct').value) || 0;
+  var exp = amt * (1 + pct/100);
+  document.getElementById('expectedReturn').value = amt && pct
+    ? 'GHS ' + exp.toLocaleString('en-GH',{minimumFractionDigits:2}) + '  (' + amt.toLocaleString('en-GH',{minimumFractionDigits:2}) + ' + ' + (amt*pct/100).toLocaleString('en-GH',{minimumFractionDigits:2}) + ')'
+    : '';
+}
+calcReturn();
+</script>
 {% endblock %}

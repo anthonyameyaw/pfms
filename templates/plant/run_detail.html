@@ -10,10 +10,11 @@
   <div class="stat-card gold"><div class="stat-label">Company (70%)</div><div class="stat-value positive">GHS {{ '{:,.2f}'.format(run['company_revenue']) }}</div></div>
   <div class="stat-card"><div class="stat-label">Operator Pay (30%)</div><div class="stat-value">GHS {{ '{:,.2f}'.format(run['operator_pay']) }}</div></div>
 </div>
+<div class="card"><div class="card-title">Cash collection</div><p>Collected: {{ 'GHS {:,.2f}'.format(run.cash_collected) if run.cash_collected is not none else 'Not recorded' }}</p><p>Outstanding: {{ 'GHS {:,.2f}'.format(run.cash_outstanding) if run.cash_outstanding is not none else 'Not recorded' }}</p>{% if run.cash_collected is not none and run.cash_collected > run.gross_revenue %}<p>Excess collected: GHS {{ '{:,.2f}'.format(run.cash_collected-run.gross_revenue) }}</p>{% endif %}</div>
 {% if contributing %}
 <div class="card"><div class="card-title">Contributing Farms</div>
-<table><thead><tr><th>Farm</th><th class="text-right">Bunches</th></tr></thead>
-<tbody>{% for c in contributing %}<tr><td>{{ c['farm_name'] }}</td><td class="text-right mono">{{ c['bunches_contributed'] }}</td></tr>{% endfor %}</tbody>
+<table><thead><tr><th>Farm</th><th class="text-right">Bunches</th><th class="text-right">Gallons (25 L)</th></tr></thead>
+<tbody>{% for c in contributing %}<tr><td>{{ c['farm_name'] }}</td><td class="text-right mono">{{ c['bunches_contributed'] }}</td><td class="text-right mono">{{ c['gallons_contributed'] if c['gallons_contributed'] is not none else 'Unspecified' }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% endif %}
 {% if run['notes'] %}<div class="card"><div class="card-title">Notes</div><p>{{ run['notes'] }}</p></div>{% endif %}

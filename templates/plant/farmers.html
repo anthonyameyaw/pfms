@@ -16,7 +16,8 @@
       <td>{{ f['phone'] or '—' }}</td>
       <td>{{ f['location'] or '—' }}</td>
       <td class="small muted">{{ f['notes'] or '—' }}</td>
-      <td><form method="POST" action="{{ url_for('plant.delete_farmer', farmer_id=f['id']) }}" data-confirm="Remove {{ f['name'] }}?"><button class="btn btn-sm btn-danger">Remove</button></form></td>
+      <td><form method="POST" action="{{ url_for('plant.delete_farmer', farmer_id=f['id']) }}" data-confirm="Remove {{ f['name'] }}?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Remove</button></form></td>
     </tr>
     {% else %}
     <tr><td colspan="5" class="text-center muted" style="padding:32px;">No outside farmers added yet.</td></tr>

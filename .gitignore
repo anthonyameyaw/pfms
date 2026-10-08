@@ -5,3 +5,22 @@ __pycache__/
 *.pyo
 .DS_Store
 .Rhistory
+
+# Local session signing key and private database backups
+database/.session_secret
+database/backups/
+
+.runtime/
+
+# Private data, local environments and exports
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+exports/

@@ -3,36 +3,40 @@
 {% block page_title %}Reports & Export{% endblock %}
 
 {% block content %}
+<p><a class="btn btn-outline" href="{{ url_for('finances.oil_costs') }}">Farm cost per gallon &amp; selling-price planning</a></p>
 <div class="page-header">
   <div>
     <h2>Reports & Export</h2>
-    <p>Select a date range then download PDF or CSV reports.</p>
+    <p>Apply a date range to the financial summary and PDF reports. Raw-record CSV files contain all recorded dates; the financial summary CSV follows the selected period.</p>
   </div>
 </div>
 
 <div class="card">
   <div class="card-title">📅 Select Report Period</div>
+  <form method="GET">
   <div class="form-grid" style="align-items:flex-end;">
     <div class="form-group">
       <label>From Date</label>
-      <input type="date" id="dateFrom" onchange="updateLinks()">
+      <input type="date" id="dateFrom" name="date_from" value="{{ date_from }}" onchange="updateLinks()">
     </div>
     <div class="form-group">
       <label>To Date</label>
-      <input type="date" id="dateTo" onchange="updateLinks()">
+      <input type="date" id="dateTo" name="date_to" value="{{ date_to }}" onchange="updateLinks()">
     </div>
     <div class="form-group">
       <label>Quick Select</label>
       <div class="flex gap-2" style="flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick="setRange('this_month')">This Month</button>
-        <button class="btn btn-outline btn-sm" onclick="setRange('last_month')">Last Month</button>
-        <button class="btn btn-outline btn-sm" onclick="setRange('this_year')">This Year</button>
-        <button class="btn btn-outline btn-sm" onclick="setRange('all')">All Time</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="setRange('this_month')">This Month</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="setRange('last_month')">Last Month</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="setRange('this_year')">This Year</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="setRange('all')">All Time</button>
       </div>
     </div>
   </div>
+  <button type="submit" class="btn btn-primary">Apply Period</button>
+  </form>
   <div id="periodLabel" class="small muted" style="margin-top:10px;font-weight:500;">
-    📄 Report period: <strong>All Time</strong>
+    📄 Applied period: <strong>{{ date_from or 'Beginning' }} → {{ date_to or 'All recorded dates' }}</strong>
   </div>
 </div>
 
@@ -40,7 +44,7 @@
   <div class="stat-card">
     <div class="stat-label">Total Income</div>
     <div class="stat-value positive">GHS {{ '{:,.2f}'.format(summary.total_income) }}</div>
-    <div class="stat-sub">Farm: GHS {{ '{:,.0f}'.format(summary.farm_income) }} · Plant: GHS {{ '{:,.0f}'.format(summary.plant_income) }}</div>
+    <div class="stat-sub">Farms: GHS {{ '{:,.0f}'.format(summary.farm_income) }} · Storage: GHS {{ '{:,.0f}'.format(summary.storage_sales) }} · Plant: GHS {{ '{:,.0f}'.format(summary.plant_income) }}</div>
   </div>
   <div class="stat-card red">
     <div class="stat-label">Total Expenses</div>
@@ -51,12 +55,15 @@
     <div class="stat-value {% if summary.net >= 0 %}positive{% else %}negative{% endif %}">
       <strong>GHS {{ '{:,.2f}'.format(summary.net) }}</strong>
     </div>
-    <div class="stat-sub">{{ '{:.1f}'.format(summary.net / summary.total_income * 100 if summary.total_income > 0 else 0) }}% margin</div>
+    <div class="stat-sub">{{ ('{:.1f}% recorded net margin'.format(summary.net / summary.total_income * 100)) if summary.total_income > 0 else 'Margin not calculable without income' }}</div>
   </div>
 </div>
 
+{% include 'partials/financial_breakdown.html' %}
+
 <div class="card">
-  <div class="card-title">📄 PDF Financial Reports</div>
+  <div class="card-title">Financial Reports for Applied Period</div>
+  <a href="{{ url_for('reports.export_financial_summary', date_from=date_from, date_to=date_to) }}" data-base="{{ url_for('reports.export_financial_summary') }}" class="btn btn-outline period-link">Download Financial Summary CSV</a>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">
 
     <div style="border:1.5px solid var(--border);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:10px;">
@@ -105,9 +112,11 @@
 
 <div class="card">
   <div class="card-title">📊 CSV Data Export</div>
-  <p class="muted small mb-2">Raw data exports for Excel or Google Sheets.</p>
+  <p class="muted small mb-2">Raw data exports for Excel or Google Sheets — all recorded dates. The date selector does not filter these downloads.</p>
   <div class="flex gap-2" style="flex-wrap:wrap;">
-    <a href="{{ url_for('reports.export_harvests') }}"   class="btn btn-outline">🌾 Harvests CSV</a>
+    <a href="{{ url_for('reports.export_all_records') }}" class="btn btn-primary">All Records ZIP — including investors and pruning (All Time)</a>
+    <a href="{{ url_for('reports.export_storage') }}" class="btn btn-outline">Pooled Purchases &amp; Sales CSV (All Time)</a>
+      <a href="{{ url_for('reports.export_harvests') }}"   class="btn btn-outline">🌾 Harvests CSV</a>
     <a href="{{ url_for('reports.export_activities') }}" class="btn btn-outline">📋 Activities CSV</a>
     <a href="{{ url_for('reports.export_transport') }}"  class="btn btn-outline">🚛 Transport CSV</a>
     <a href="{{ url_for('reports.export_plant') }}"      class="btn btn-outline">🏭 Plant Runs CSV</a>
@@ -115,16 +124,17 @@
 </div>
 
 <div class="card">
-  <div class="card-title">🌿 Per-Farm P&L Summary</div>
+  <div class="card-title">🌿 Farm Income and Costs Summary</div>
+  <p class="small muted">Oil sales belong to the shared pool and are excluded from individual farm income. Farm results include assigned processing charges and exclude any still awaiting allocation. The Finances page shows these expenses for the farms as a group.</p>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>Farm</th><th>Status</th>
           <th class="text-right">Income</th>
-          <th class="text-right">Harv. Labour</th>
+          <th class="text-right">Harvest + Threshing</th>
           <th class="text-right">Transport</th>
-          <th class="text-right">Activity</th>
+          <th class="text-right">Activity + Other</th>
           <th class="text-right">Total Exp.</th>
           <th class="text-right">Net</th>
           <th></th>
@@ -136,9 +146,9 @@
           <td style="font-weight:500;">{{ f.name }}</td>
           <td><span class="badge {% if f.status=='Active' %}badge-green{% elif f.status=='Inactive' %}badge-red{% else %}badge-amber{% endif %}">{{ f.status }}</span></td>
           <td class="text-right mono {% if f.income > 0 %}positive{% endif %}">{{ '{:,.2f}'.format(f.income) }}</td>
-          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.harv_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.harv_cost + f.thresh_cost) }}</td>
           <td class="text-right mono muted">{{ '{:,.2f}'.format(f.trans_cost) }}</td>
-          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.act_cost) }}</td>
+          <td class="text-right mono muted">{{ '{:,.2f}'.format(f.act_cost + f.other_expenses) }}</td>
           <td class="text-right mono {% if f.expenses > 0 %}negative{% endif %}">{{ '{:,.2f}'.format(f.expenses) }}</td>
           <td class="text-right mono bold {% if f.net >= 0 %}positive{% else %}negative{% endif %}"><strong>{{ '{:,.2f}'.format(f.net) }}</strong></td>
           <td>
@@ -158,8 +168,8 @@
 {% block extra_js %}
 <script>
 function updateLinks() {
-  var from = document.getElementById('dateFrom').value;
-  var to   = document.getElementById('dateTo').value;
+  var from = {{ date_from|tojson }};
+  var to   = {{ date_to|tojson }};
   var params = '';
   if (from || to) {
     var parts = [];
@@ -167,19 +177,18 @@ function updateLinks() {
     if (to)   parts.push('date_to='   + to);
     params = '?' + parts.join('&');
   }
-  document.querySelectorAll('.pdf-link').forEach(function(a) {
+  document.querySelectorAll('.pdf-link, .period-link').forEach(function(a) {
     a.href = a.dataset.base + params;
   });
   var lbl = document.getElementById('periodLabel');
-  if (from && to)        lbl.innerHTML = '📄 Report period: <strong>' + from + ' to ' + to + '</strong>';
-  else if (from)         lbl.innerHTML = '📄 Report period: <strong>From ' + from + '</strong>';
-  else if (to)           lbl.innerHTML = '📄 Report period: <strong>Up to ' + to + '</strong>';
-  else                   lbl.innerHTML = '📄 Report period: <strong>All Time</strong>';
+  var changed = document.getElementById('dateFrom').value !== from || document.getElementById('dateTo').value !== to;
+  lbl.textContent = 'Applied period: ' + (from || 'Beginning') + ' → ' + (to || 'All recorded dates') +
+    (changed ? ' — click Apply Period to update summaries and PDFs.' : '');
 }
 
 function setRange(preset) {
   var today = new Date();
-  function fmt(d) { return d.toISOString().slice(0,10); }
+  function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
   var from = '', to = '';
   if (preset === 'this_month') {
     from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -195,5 +204,6 @@ function setRange(preset) {
   document.getElementById('dateTo').value   = to;
   updateLinks();
 }
+updateLinks();
 </script>
 {% endblock %}

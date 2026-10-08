@@ -27,7 +27,8 @@
       <td class="text-right mono">{{ '{:,.2f}'.format(log['driver_pay']) if log['driver_pay'] else '—' }}</td>
       <td class="text-right mono">{{ '{:,.2f}'.format(log['rental_cost']) if log['rental_cost'] else '—' }}</td>
       <td class="text-right mono bold">{{ '{:,.2f}'.format(log['total_cost']) }}</td>
-      <td><form method="POST" action="{{ url_for('transport.delete', log_id=log['id']) }}" data-confirm="Delete?"><button class="btn btn-sm btn-danger">Del</button></form></td>
+      <td><form method="POST" action="{{ url_for('transport.delete', log_id=log['id']) }}" data-confirm="Delete?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Del</button></form></td>
     </tr>
     {% else %}
     <tr><td colspan="8" class="text-center muted" style="padding:24px;">No transport logs.</td></tr>

@@ -1,0 +1,5 @@
+<div class="form-group">
+  <label for="threshingCost">Defruiting / threshing cost (GHS)</label>
+  <input type="number" name="threshing_cost" id="threshingCost" min="0" step="0.01" value="{{ defruiting_cost or 0 }}" oninput="updateTotalLabour()">
+  <span class="small muted">Enter separately from harvester and collector pay. Count each payment once.</span>
+</div>

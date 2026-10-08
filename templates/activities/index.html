@@ -59,7 +59,8 @@
         <td>
           <div class="flex gap-2">
             <a href="{{ url_for('activities.edit', activity_id=a['id']) }}" class="btn btn-sm btn-outline">Edit</a>
-            <form method="POST" action="{{ url_for('activities.delete', activity_id=a['id']) }}" data-confirm="Delete this activity?">
+            <form method="POST" action="{{ url_for('activities.delete', activity_id=a['id']) }}" data-confirm="Delete this activity and any linked harvest or pruning batch?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-sm btn-danger">Del</button>
             </form>
           </div>

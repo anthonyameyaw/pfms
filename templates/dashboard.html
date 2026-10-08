@@ -1,204 +1,47 @@
 {% extends 'base.html' %}
-{% block title %}Dashboard{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
-
-{% block extra_css %}
-<style>
-.trend { font-size: 0.75rem; font-weight: 600; margin-left: 6px; }
-.trend.up   { color: var(--green-mid); }
-.trend.down { color: var(--red); }
-.trend.flat { color: var(--ink-muted); }
-.fotm-card { background: linear-gradient(135deg, var(--green-dark) 0%, var(--green-mid) 100%); border-radius: var(--r); padding: 24px 28px; color: white; position: relative; overflow: hidden; margin-bottom: 22px; }
-.fotm-card::before { content: '🌴'; position: absolute; right: -8px; bottom: -12px; font-size: 6rem; opacity: 0.12; transform: rotate(12deg); pointer-events: none; }
-.fotm-eyebrow { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--gold); font-weight: 600; margin-bottom: 6px; }
-.fotm-name { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; font-weight: 700; line-height: 1.1; margin-bottom: 12px; }
-.fotm-stats { display: flex; gap: 24px; flex-wrap: wrap; }
-.fotm-stat-label { font-size: 0.68rem; color: rgba(255,255,255,0.55); margin-bottom: 2px; }
-.fotm-stat-val { font-size: 1.05rem; font-weight: 600; color: var(--gold); }
-.heatmap-grid { display: grid; grid-template-columns: repeat(53, 1fr); gap: 3px; margin-top: 8px; }
-.heatmap-cell { aspect-ratio: 1; border-radius: 2px; background: var(--border-soft); cursor: default; transition: transform 0.1s; }
-.heatmap-cell:hover { transform: scale(1.4); z-index: 10; }
-.heatmap-cell[data-b="1"] { background: #c8e6c9; }
-.heatmap-cell[data-b="2"] { background: #81c784; }
-.heatmap-cell[data-b="3"] { background: #4caf50; }
-.heatmap-cell[data-b="4"] { background: var(--green-mid); }
-.heatmap-cell[data-b="5"] { background: var(--green-dark); }
-.radar-wrap { position: relative; height: 300px; }
+{% block title %}Dashboard{% endblock %}{% block page_title %}Dashboard{% endblock %}
+{% block extra_css %}<style>
+.dash .stat-grid{gap:12px;margin-bottom:18px}.dash .stat-card{padding:15px 18px;box-shadow:none}.dash .stat-card::before{display:none}.dash .stat-value{font-family:inherit;font-size:1.4rem;font-variant-numeric:tabular-nums;line-height:1.3}.dash .stat-label{margin-bottom:7px}.dash .stat-sub{font-size:.7rem}.dash-columns{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(260px,1fr);gap:18px}.dash-columns>*{min-width:0}.dash-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.dash-heading h3{margin:0}.dash-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}.dash-alert{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-soft);text-decoration:none;color:var(--ink)}.dash-alert strong{white-space:nowrap}.dash-detail summary{cursor:pointer;font-weight:600}.dash-detail[open] summary{margin-bottom:14px}.dash-list{display:flex;justify-content:space-between;gap:14px;padding:9px 0;border-bottom:1px solid var(--border-soft)}.dash .chart-container{height:260px}.dash-calendar{display:grid;grid-template-columns:repeat(31,minmax(0,1fr));gap:3px}.dash-day{aspect-ratio:1;background:var(--border-soft);border-radius:2px}.dash-production progress{width:100%;height:6px;accent-color:var(--green-mid)}@media(max-width:950px){.dash-columns{grid-template-columns:1fr}}@media(max-width:550px){.dash .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash .stat-value{font-size:1.1rem}.dash-alert{flex-wrap:wrap}}
 .weather-widget { background: linear-gradient(135deg, #0f4c75 0%, #1b6ca8 60%, #2196f3 100%); border-radius: var(--r); padding: 20px 22px; color: white; position: relative; overflow: hidden; }
 .weather-widget::before { content: ''; position: absolute; top: -30px; right: -30px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.06); }
 .weather-temp { font-family: 'Cormorant Garamond', serif; font-size: 2.8rem; font-weight: 700; line-height: 1; }
 .weather-desc { font-size: 0.84rem; opacity: 0.85; margin-top: 2px; text-transform: capitalize; }
 .weather-detail { font-size: 0.75rem; opacity: 0.65; margin-top: 10px; }
-.section-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-soft); font-weight: 700; margin: 28px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border-soft); }
-</style>
-{% endblock %}
-
-{% block content %}
-
-<div class="section-label">All-Time Performance</div>
+.weather-widget{width:100%;max-width:380px;box-sizing:border-box;margin-bottom:16px}
+</style>{% endblock %}
+{% block content %}<div class="dash">
+<div class="page-header"><div><h2>Farm overview</h2><p>{{ today.strftime('%A, %d %B %Y') }}</p></div><a href="{{ url_for('reports.index') }}" class="btn btn-outline">Reports</a></div>
+<div class="weather-widget" aria-label="Weather in Dormaa West, Ghana"><div id="weatherContent" role="status"><div style="opacity:.7;font-size:.84rem">⏳ Loading weather...</div></div></div>
+<div class="dash-quick"><a class="btn btn-primary" href="{{ url_for('harvests.add') }}">+ Harvest</a><a class="btn btn-outline" href="{{ url_for('plant.add_run') }}">+ Processing run</a><a class="btn btn-outline" href="{{ url_for('storage.log_sale') }}">+ Oil sale</a><button class="btn btn-outline" onclick="document.getElementById('expenseChoice').showModal()">+ Expense</button><a class="btn btn-outline" href="{{ url_for('finances.oil_costs') }}">Cost &amp; price planner</a></div>
+<dialog id="expenseChoice" style="border:0;border-radius:12px;padding:24px"><h3>Record an expense</h3><p><a class="btn btn-primary" href="{{ url_for('activities.add') }}">Farm activity costs</a> <a class="btn btn-outline" href="{{ url_for('plant.add_expense') }}">Plant expense</a></p><form method="dialog"><button class="btn btn-outline">Close</button></form></dialog>
+<div class="dash-heading"><h3>Overall finances</h3><span class="small muted">All time</span></div>
 <div class="stat-grid">
-  <div class="stat-card">
-    <div class="stat-label">All-Time Income</div>
-    <div class="stat-value positive">GHS <span class="counter" data-target="{{ alltime_income }}">0</span></div>
-    <div class="stat-sub">Farms: GHS {{ '{:,.0f}'.format(alltime_farm_income) }} · Plant: GHS {{ '{:,.0f}'.format(alltime_plant_income) }}</div>
-  </div>
-  <div class="stat-card red">
-    <div class="stat-label">All-Time Expenses</div>
-    <div class="stat-value negative">GHS <span class="counter" data-target="{{ alltime_expenses }}">0</span></div>
-  </div>
-  <div class="stat-card {% if alltime_net >= 0 %}gold{% else %}red{% endif %}">
-    <div class="stat-label">All-Time Net Profit</div>
-    <div class="stat-value {% if alltime_net >= 0 %}positive{% else %}negative{% endif %}">GHS <span class="counter" data-target="{{ alltime_net }}">0</span></div>
-  </div>
+{% for label,value in [('Income',alltime_income),('Expenses',alltime_expenses),('Profit' if alltime_net>=0 else 'Loss',alltime_net)] %}<div class="stat-card"><div class="stat-label">{{ label }}</div><div class="stat-value">GHS {{ '{:,.2f}'.format(value) }}</div></div>{% endfor %}
+<div class="stat-card gold"><div class="stat-label">{{ 'Profit' if alltime_net>=0 else 'Loss' }} margin</div><div class="stat-value">{% if alltime_income>0 %}{{ '{:.1f}'.format(net_margin) }}%{% else %}—{% endif %}</div><div class="stat-sub">{% if alltime_income>0 %}Profit / loss ÷ income{% else %}No income recorded{% endif %}</div></div>
 </div>
+<div class="small muted" style="margin-bottom:10px">{{ today.strftime('%B %Y') }} · month to date</div>
+<div class="stat-grid">{% for label,value,pct in [('Income',monthly_income,income_pct),('Expenses',monthly_expenses,expenses_pct),('Recorded net',monthly_net,net_pct)] %}<div class="stat-card"><div class="stat-label">{{ label }}</div><div class="stat-value">GHS {{ '{:,.2f}'.format(value) }}</div><div class="stat-sub">{% if pct is none %}No comparison available{% else %}{% set direction = income_trend if label=='Income' else expenses_trend if label=='Expenses' else net_trend %}{{ '↑' if direction=='up' else '↓' if direction=='down' else '—' }} {{ pct }}% vs same dates last month{% endif %}</div></div>{% endfor %}
+<div class="stat-card gold"><div class="stat-label">Oil in storage</div><div class="stat-value">{{ '{:,.2f}'.format(stock_gallons) }} gal</div><div class="stat-sub">As of today · <a href="{{ url_for('storage.index') }}">View storage →</a></div></div></div>
+<div class="dash-columns"><div class="card"><div class="dash-heading"><h3>Monthly performance</h3><a href="{{ url_for('finances.index') }}">Finances →</a></div><div class="chart-container"><canvas id="monthlyTrendChart"></canvas></div><p id="chartFallback" class="small muted" hidden>Chart unavailable. Open Finances for the recorded totals.</p></div>
+<div class="card"><div class="dash-heading"><h3>Needs attention</h3><span class="badge badge-amber">{{ attention|length }}</span></div>{% for item in attention %}<a class="dash-alert" href="{{ item.url }}"><span>{{ item.label }}</span><strong>{{ item.value }} →</strong></a>{% else %}<p class="muted">No pending items in these checks.</p>{% endfor %}</div></div>
+<div class="dash-columns"><div class="card"><div class="dash-heading"><h3>Recent activity</h3><span class="small muted">By record date</span></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Record</th><th class="text-right">Amount / output</th></tr></thead><tbody>{% for item in recent %}<tr><td class="small">{{ item.date }}</td><td><a href="{{ item.url }}">{{ item.label }}</a><div class="small muted">{{ item.kind }}</div></td><td class="text-right">{{ 'GHS ' if item.unit=='GHS' else '' }}{{ '{:,.2f}'.format(item.amount or 0) }}{{ ' gal' if item.unit=='gallons' else '' }}</td></tr>{% else %}<tr><td colspan="3" class="muted">No activity recorded yet.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card dash-production"><div class="dash-heading"><h3>Farm production</h3><a href="{{ url_for('harvests.index') }}">Harvests →</a></div><p class="small muted">Processed gallons · {{ today.strftime('%B %Y') }}</p>{% set total=production|sum(attribute='gallons') %}{% for farm in production if farm.gallons>0 %}<div class="dash-list"><a href="{{ url_for('farms.detail',farm_id=farm.id) }}">{{ farm.name }}</a><strong>{{ farm.gallons }} gal</strong></div><progress value="{{ farm.gallons }}" max="{{ total }}" aria-label="{{ farm.name }} share of monthly farm output"></progress>{% else %}<p class="muted">No processed farm oil recorded this month.</p>{% endfor %}</div></div>
+<details class="card dash-detail"><summary>Income sources · all time</summary>{% for name,amount in [('Oil sales',pooled_income),('Outside processing fees',alltime_plant_income),('Other farm income',alltime_farm_income)] %}<div class="dash-list"><span>{{ name }}</span><strong>GHS {{ '{:,.2f}'.format(amount) }}</strong></div>{% endfor %}<p class="small muted">Internal processing transfers are excluded. <a href="{{ url_for('finances.index') }}">Full financial breakdown →</a></p></details>
+<details class="card dash-detail"><summary>Harvest calendar · last 365 days</summary><p class="small muted">One square per day, oldest first. Hover or focus for date and bunches.</p><div id="harvestCalendar" class="dash-calendar"></div></details>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:24px;">
-  <div class="kpi-tile {% if net_margin >= 40 %}good{% elif net_margin >= 15 %}warn{% else %}bad{% endif %}">
-    <div class="kpi-tile-label">Net Margin</div>
-    <div class="kpi-tile-value">{{ net_margin }}%</div>
-    <div class="kpi-tile-note">Target ≥ 40%</div>
-  </div>
-  <div class="kpi-tile {% if exp_ratio <= 60 %}good{% elif exp_ratio <= 80 %}warn{% else %}bad{% endif %}">
-    <div class="kpi-tile-label">Expense Ratio</div>
-    <div class="kpi-tile-value">{{ exp_ratio }}%</div>
-    <div class="kpi-tile-note">of total income</div>
-  </div>
-  <div class="kpi-tile {% if irr_proxy >= 20 %}good{% elif irr_proxy >= 5 %}warn{% else %}bad{% endif %}">
-    <div class="kpi-tile-label">ROI</div>
-    <div class="kpi-tile-value">{{ irr_proxy }}%</div>
-    <div class="kpi-tile-note">net ÷ total costs</div>
-  </div>
-</div>
-
-<div class="section-label">This Month</div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr 280px;gap:16px;margin-bottom:24px;">
-  <div class="stat-card">
-    <div class="stat-label">Monthly Income</div>
-    <div class="stat-value positive">GHS <span class="counter" data-target="{{ monthly_income }}">0</span></div>
-    <div class="stat-sub">YTD: GHS {{ '{:,.0f}'.format(ytd_income) }}
-      <span class="trend {{ income_trend }}">{% if income_trend == 'up' %}▲{% elif income_trend == 'down' %}▼{% else %}–{% endif %} {% if income_pct > 0 %}{{ income_pct }}%{% endif %}</span>
-    </div>
-  </div>
-  <div class="stat-card red">
-    <div class="stat-label">Monthly Expenses</div>
-    <div class="stat-value negative">GHS <span class="counter" data-target="{{ monthly_expenses }}">0</span></div>
-    <div class="stat-sub">YTD: GHS {{ '{:,.0f}'.format(ytd_expenses) }}</div>
-  </div>
-  <div class="stat-card {% if monthly_net >= 0 %}gold{% else %}red{% endif %}">
-    <div class="stat-label">Monthly Net Profit</div>
-    <div class="stat-value {% if monthly_net >= 0 %}positive{% else %}negative{% endif %}">GHS <span class="counter" data-target="{{ monthly_net }}">0</span></div>
-    <div class="stat-sub">YTD: GHS {{ '{:,.0f}'.format(ytd_net) }}</div>
-  </div>
-  <div class="weather-widget">
-    <div id="weatherContent"><div style="opacity:0.7;font-size:0.84rem;">⏳ Loading weather...</div></div>
-  </div>
-</div>
-
-{% if fotm %}
-<div class="fotm-card">
-  <div class="fotm-eyebrow">⭐ {% if fotm.get('alltime') %}Best Performing Farm (All Time){% else %}Farm of the Month{% endif %}</div>
-  <div class="fotm-name">{{ fotm.name }}</div>
-  <div class="fotm-stats">
-    <div><div class="fotm-stat-label">Income</div><div class="fotm-stat-val">GHS {{ '{:,.2f}'.format(fotm.at_income if fotm.get('alltime') else fotm.m_income) }}</div></div>
-    <div><div class="fotm-stat-label">Net Profit</div><div class="fotm-stat-val">GHS {{ '{:,.2f}'.format(fotm.net) }}</div></div>
-    <div><div class="fotm-stat-label">Bunches</div><div class="fotm-stat-val">{{ '{:,}'.format(fotm.bunches or 0) }}</div></div>
-    <div style="margin-left:auto;"><a href="{{ url_for('farms.detail', farm_id=fotm.id) }}" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:var(--gold);color:var(--green-dark);border-radius:6px;font-size:0.82rem;font-weight:600;text-decoration:none;">View Farm →</a></div>
-  </div>
-</div>
-{% endif %}
-
-{% if notif_count > 0 %}
-<div class="alert alert-amber">
-  <span>🔔</span>
-  <div><strong>{{ notif_count }} item{{ 's' if notif_count > 1 else '' }} need attention:</strong>
-    {% if notif_pending > 0 %} {{ notif_pending }} harvest{{ 's' if notif_pending > 1 else '' }} missing gallons. <a href="{{ url_for('harvests.index') }}" style="color:var(--gold-dark);font-weight:600;">Update →</a>{% endif %}
-    {% if notif_pruning > 0 %} {{ notif_pruning }} farm{{ 's' if notif_pruning > 1 else '' }} have pruning due. <a href="{{ url_for('pruning.index') }}" style="color:var(--gold-dark);font-weight:600;">View →</a>{% endif %}
-  </div>
-</div>
-{% endif %}
-
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;margin-bottom:22px;">
-  <div class="card">
-    <div class="card-title">🥧 Income Distribution</div>
-    <div class="chart-container" style="height:200px;"><canvas id="incomeDistChart"></canvas></div>
-    <div style="margin-top:12px;">
-      <div class="flex justify-between small muted mb-1"><span>🌿 Farm Oil Sales</span><span class="mono">{{ '{:.0f}'.format(alltime_farm_income/alltime_income*100 if alltime_income > 0 else 0) }}%</span></div>
-      <div class="flex justify-between small muted"><span>🏭 Plant Processing</span><span class="mono">{{ '{:.0f}'.format(alltime_plant_income/alltime_income*100 if alltime_income > 0 else 0) }}%</span></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">📈 Monthly Income, Expenses & Net (Last 12 Months)</div>
-    <div class="chart-container"><canvas id="monthlyTrendChart"></canvas></div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-title">🗓 Harvest Calendar — Last 365 Days</div>
-  <div class="small muted" style="margin-bottom:8px;">Each cell = one day. Darker = more bunches harvested.</div>
-  <div class="heatmap-grid" id="heatmapGrid"></div>
-  <div class="flex gap-3 mt-2 small muted items-center">
-    <span>Less</span>
-    <div style="width:12px;height:12px;border-radius:2px;background:var(--border-soft);"></div>
-    <div style="width:12px;height:12px;border-radius:2px;background:#c8e6c9;"></div>
-    <div style="width:12px;height:12px;border-radius:2px;background:#81c784;"></div>
-    <div style="width:12px;height:12px;border-radius:2px;background:var(--green-mid);"></div>
-    <div style="width:12px;height:12px;border-radius:2px;background:var(--green-dark);"></div>
-    <span>More</span>
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;">
-  <div class="card">
-    <div class="card-title">🕸 Farm Comparison Radar</div>
-    <div class="radar-wrap"><canvas id="radarChart"></canvas></div>
-  </div>
-  <div class="card">
-    <div class="card-title">📊 Farm P&L Overview</div>
-    <div class="chart-container"><canvas id="farmPlChart"></canvas></div>
-  </div>
-</div>
-
-{% if monthly_elec_maint %}
-<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-bottom:22px;">
-  <div class="card">
-    <div class="card-title">📊 Monthly Gross Revenue vs Electricity Cost</div>
-    <div class="chart-container" style="height:200px;"><canvas id="grossElecChart"></canvas></div>
-  </div>
-  <div class="card">
-    <div class="card-title">🔧 Maintenance as % of Company Revenue</div>
-    <div class="chart-container" style="height:200px;"><canvas id="maintPctChart"></canvas></div>
-  </div>
-</div>
-{% endif %}
-
-{% endblock %}
-
-{% block extra_js %}
-<script>
-const GHS = n => 'GHS ' + Number(n).toLocaleString('en-GH', {minimumFractionDigits:2, maximumFractionDigits:2});
-
-// Animated counters
-document.querySelectorAll('.counter[data-target]').forEach(function(el) {
-  var target = parseFloat(el.dataset.target) || 0;
-  var neg = target < 0;
-  var abs = Math.abs(target);
-  var steps = 75;
-  var cur = 0;
-  var inc = abs / steps;
-  var timer = setInterval(function() {
-    cur = Math.min(cur + inc, abs);
-    el.textContent = (neg ? '-' : '') + cur.toLocaleString('en-GH', {minimumFractionDigits:2, maximumFractionDigits:2});
-    if (cur >= abs) clearInterval(timer);
-  }, 16);
-});
-
-// Weather
+</div>{% endblock %}
+{% block extra_js %}<script>
+const monthly={{ monthly_chart|tojson }};
+if(typeof Chart!=='undefined')new Chart(document.getElementById('monthlyTrendChart'),{type:'bar',data:{labels:monthly.map(x=>x.month),datasets:[{label:'Income',data:monthly.map(x=>x.income),backgroundColor:'#52b788',borderRadius:3},{label:'Expenses',data:monthly.map(x=>x.expenses),backgroundColor:'#e77979',borderRadius:3},{label:'Recorded net',data:monthly.map(x=>x.net),type:'line',borderColor:'#bf982f',tension:.2}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},scales:{y:{beginAtZero:true,ticks:{callback:v=>'GHS '+v.toLocaleString()}}}}});else document.getElementById('chartFallback').hidden=false;
+const days={{ heatmap_data|tojson }},end=new Date({{ today.isoformat()|tojson }}+'T00:00:00Z'),grid=document.getElementById('harvestCalendar');const max=Math.max(1,...Object.values(days));for(let offset=364;offset>=0;offset--){let d=new Date(end);d.setUTCDate(d.getUTCDate()-offset);const key=d.toISOString().slice(0,10),count=days[key]||0,cell=document.createElement('span');cell.className='dash-day';cell.tabIndex=0;cell.title=key+': '+count+' recorded bunches';cell.setAttribute('aria-label',cell.title);if(count)cell.style.background='rgba(45,106,79,'+(.25+.75*count/max)+')';grid.appendChild(cell);}
 (async function() {
   var el = document.getElementById('weatherContent');
   try {
-    var res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=7.35&longitude=-2.85&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=Africa%2FAccra');
+    var res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=7.35&longitude=-2.85&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=Africa%2FAccra',{signal:AbortSignal.timeout(8000)});
+    if (!res.ok) throw new Error('Weather unavailable');
     var d = await res.json();
     var c = d.current;
+    if (!c || ![c.temperature_2m,c.relative_humidity_2m,c.wind_speed_10m].every(Number.isFinite)) throw new Error("Invalid weather response");
     var icons = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',51:'🌦',61:'🌧',80:'🌦',95:'⛈'};
     var descs = {0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Foggy',51:'Light drizzle',61:'Rain',80:'Showers',95:'Thunderstorm'};
     var icon = icons[c.weather_code] || '🌡';
@@ -209,101 +52,4 @@ document.querySelectorAll('.counter[data-target]').forEach(function(el) {
   }
 })();
 
-// Heatmap
-(function() {
-  var data = {{ heatmap_data | tojson }};
-  var grid = document.getElementById('heatmapGrid');
-  var today = new Date();
-  var start = new Date(today);
-  start.setDate(start.getDate() - 364);
-  start.setDate(start.getDate() - start.getDay());
-  var maxB = Math.max(1, Math.max.apply(null, Object.values(data).concat([0])));
-  for (var i = 0; i < 53*7; i++) {
-    var d = new Date(start);
-    d.setDate(d.getDate() + i);
-    if (d > today) { var ph = document.createElement('div'); ph.style.cssText='aspect-ratio:1;'; grid.appendChild(ph); continue; }
-    var key = d.toISOString().slice(0,10);
-    var bunches = data[key] || 0;
-    var cell = document.createElement('div');
-    cell.className = 'heatmap-cell';
-    if (bunches > 0) cell.dataset.b = Math.min(5, Math.ceil(bunches / maxB * 5));
-    cell.title = key + ': ' + (bunches ? bunches+' bunches' : 'No harvest');
-    grid.appendChild(cell);
-  }
-})();
-
-// Radar chart
-var radar = {{ radar_data | tojson }};
-if (radar.length) {
-  new Chart(document.getElementById('radarChart'), {
-    type: 'radar',
-    data: {
-      labels: ['Income', 'Gallons', 'Bunches', 'Efficiency'],
-      datasets: radar.map(function(f, i) {
-        var colors = ['#2d6a4f','#52b788','#e9c46a','#f4a261','#e63946'];
-        return { label: f.name, data: [f.income, f.gallons, f.bunches, 100 - f.expenses], borderColor: colors[i%colors.length], backgroundColor: colors[i%colors.length]+'22', borderWidth: 2, pointRadius: 4, pointBackgroundColor: colors[i%colors.length] };
-      })
-    },
-    options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 100, grid: { color: '#ddeae1' }, pointLabels: { font: { size: 11 }, color: '#5a7566' }, ticks: { display: false } } }, plugins: { legend: { position: 'bottom' } } }
-  });
-}
-
-// Income distribution doughnut
-var incomeData = [{{ alltime_farm_income }}, {{ alltime_plant_income }}];
-if (incomeData[0] + incomeData[1] > 0) {
-  new Chart(document.getElementById('incomeDistChart'), {
-    type: 'doughnut',
-    data: { labels: ['Farm Oil Sales','Plant Processing'], datasets: [{ data: incomeData, backgroundColor: ['#2d6a4f','#e9c46a'], borderWidth: 3, borderColor: '#fff' }] },
-    options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx) { return ' ' + GHS(ctx.parsed); } } } } }
-  });
-}
-
-// Monthly trend chart
-var mt = {{ monthly_chart | tojson }};
-if (mt.length) {
-  new Chart(document.getElementById('monthlyTrendChart'), {
-    type: 'bar',
-    data: {
-      labels: mt.map(function(d) { return d.month; }),
-      datasets: [
-        { label: 'Income',   data: mt.map(function(d) { return d.income; }),   backgroundColor: '#52b78866', borderColor: '#52b788', borderWidth: 1.5, borderRadius: 4 },
-        { label: 'Expenses', data: mt.map(function(d) { return d.expenses; }), backgroundColor: '#e6394666', borderColor: '#e63946', borderWidth: 1.5, borderRadius: 4 },
-        { label: 'Net Profit', data: mt.map(function(d) { return d.net; }), type: 'line', borderColor: '#e9c46a', backgroundColor: 'rgba(233,196,106,0.08)', fill: true, tension: 0.35, pointRadius: 3, pointBackgroundColor: '#e9c46a', borderWidth: 2 },
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#eef4f0' }, ticks: { callback: function(v) { return 'GHS '+(v>=1000?(v/1000).toFixed(0)+'k':v); } } } } }
-  });
-}
-
-// Farm P&L chart
-var fp = {{ farm_pl_chart | tojson }};
-if (fp.length) {
-  new Chart(document.getElementById('farmPlChart'), {
-    type: 'bar',
-    data: {
-      labels: fp.map(function(d) { return d.name.replace('Palm Farm ','').replace('Whitehouse','WH'); }),
-      datasets: [
-        { label: 'Income',   data: fp.map(function(d) { return d.income; }),   backgroundColor: '#52b788', borderRadius: 4 },
-        { label: 'Expenses', data: fp.map(function(d) { return d.expenses; }), backgroundColor: '#f4a261', borderRadius: 4 },
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#eef4f0' }, ticks: { callback: function(v) { return 'GHS '+(v>=1000?(v/1000).toFixed(0)+'k':v); } } } } }
-  });
-}
-
-// Plant charts
-var em = {{ monthly_elec_maint | tojson }};
-if (em.length) {
-  new Chart(document.getElementById('grossElecChart'), {
-    type: 'bar',
-    data: { labels: em.map(function(d){return d.month;}), datasets: [ { label:'Gross Revenue', data:em.map(function(d){return d.gross_revenue;}), backgroundColor:'#52b788', borderRadius:3 }, { label:'Electricity', data:em.map(function(d){return d.electricity;}), backgroundColor:'#e63946', borderRadius:3 } ] },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#eef4f0'},ticks:{callback:function(v){return 'GHS '+v;}}}}}
-  });
-  new Chart(document.getElementById('maintPctChart'), {
-    type:'bar',
-    data:{ labels:em.map(function(d){return d.month;}), datasets:[ {label:'Maintenance (GHS)', data:em.map(function(d){return d.maintenance;}), backgroundColor:'#f4a261', borderRadius:3, yAxisID:'y'}, {label:'% of Co. Revenue', data:em.map(function(d){return d.maint_pct;}), type:'line', borderColor:'#e9c46a', fill:false, tension:0.3, pointRadius:3, yAxisID:'y1'} ] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'top'}}, scales:{ x:{grid:{display:false}}, y:{position:'left',beginAtZero:true,grid:{color:'#eef4f0'},title:{display:true,text:'GHS'}}, y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'%'},ticks:{callback:function(v){return v+'%';}}} } }
-  });
-}
-</script>
-{% endblock %}
+</script>{% endblock %}

@@ -19,40 +19,43 @@ def get_connection():
 
 
 def init_db():
-    """Initialize the database by running the schema SQL."""
+    """Create or upgrade the database through tracked, atomic migrations."""
+    from database.migrations import upgrade
     conn = get_connection()
-    with open(SCHEMA_PATH, 'r') as f:
-        conn.executescript(f.read())
-    conn.commit()
-    conn.close()
-    print(f"[PFMS] Database initialized at: {DB_PATH}")
+    try:
+        upgrade(conn, DB_PATH)
+    finally:
+        conn.close()
 
 
 def query(sql, params=(), one=False):
     """Run a SELECT query and return results."""
     conn = get_connection()
-    cur = conn.execute(sql, params)
-    rv = cur.fetchone() if one else cur.fetchall()
-    conn.close()
-    return rv
+    try:
+        cur = conn.execute(sql, params)
+        return cur.fetchone() if one else cur.fetchall()
+    finally:
+        conn.close()
 
 
 def execute(sql, params=()):
-    """Run an INSERT/UPDATE/DELETE and return the last row id."""
+    """Run one write, rolling back on error and always closing the connection."""
     conn = get_connection()
-    cur = conn.execute(sql, params)
-    conn.commit()
-    last_id = cur.lastrowid
-    conn.close()
-    return last_id
+    try:
+        with conn:
+            return conn.execute(sql, params).lastrowid
+    finally:
+        conn.close()
 
 
 def execute_many(sql, params_list):
-    """Run a batch INSERT/UPDATE."""
+    """Run a batch atomically and always close the connection."""
     conn = get_connection()
-    conn.executemany(sql, params_list)
-    conn.commit()
-    conn.close()
+    try:
+        with conn:
+            conn.executemany(sql, params_list)
+    finally:
+        conn.close()
 
 
 # ─── Convenience helpers ───────────────────────────────────────────────────

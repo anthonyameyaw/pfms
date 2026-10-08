@@ -3,6 +3,7 @@
 {% block page_title %}{{ farm['name'] }}{% endblock %}
 
 {% block content %}
+<p><a class="btn btn-outline" href="{{ url_for('finances.oil_costs') }}">Farm cost per gallon &amp; selling-price planning</a></p>
 <div class="page-header">
   <div>
     <h2>{{ farm['name'] }}</h2>
@@ -29,7 +30,7 @@
     <div class="stat-sub">YTD: GHS {{ '{:,.2f}'.format(ytd_exp) }}</div>
   </div>
   <div class="stat-card {% if total_net >= 0 %}gold{% else %}red{% endif %}">
-    <div class="stat-label">Net Profit / Loss</div>
+    <div class="stat-label">Balance Before Pooled Sales</div>
     <div class="stat-value {% if total_net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(total_net) }}</div>
   </div>
   <div class="stat-card">
@@ -49,9 +50,9 @@
       <div class="small muted">Weeding, spraying, fertilising, etc.</div>
     </div>
     <div class="mom-box">
-      <div class="small muted">Harvesting Labour</div>
+      <div class="small muted">Harvest + Threshing Labour</div>
       <div class="mom-value negative">GHS {{ '{:,.2f}'.format(harvest_exp_total) }}</div>
-      <div class="small muted">Harvester + collector pay</div>
+      <div class="small muted">Harvester, collector and threshing pay</div>
     </div>
     <div class="mom-box">
       <div class="small muted">Transport Cost</div>
@@ -142,31 +143,15 @@
 <!-- Gallons Tracking -->
 {% if farm['crop_type'] == 'Oil Palm' %}
 <div class="card">
-  <div class="card-title">🛢 Palm Oil Gallons — Production & Storage</div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:{% if pending_harvests %}16px{% else %}0{% endif %};">
-    <div class="mom-box">
-      <div class="small muted">Total Gallons Produced</div>
-      <div class="mom-value positive">{{ '{:,.1f}'.format(total_gallons_produced) }}</div>
-      <div class="small muted">from logged harvests</div>
-    </div>
-    <div class="mom-box" style="border-color:var(--gold);">
-      <div class="small muted">Gallons in Storage</div>
-      <div class="mom-value" style="color:var(--gold-dark);">{{ '{:,.1f}'.format(gallons_in_storage) }}</div>
-      <div class="small muted">attributed to this farm</div>
-    </div>
-    <div class="mom-box" style="border-color:var(--green-light);">
-      <div class="small muted">Gallons Sold</div>
-      <div class="mom-value positive">{{ '{:,.1f}'.format(total_gallons_sold) }}</div>
-      <div class="small muted">income recorded</div>
-    </div>
-  </div>
-
+  <div class="card-title">🛢 Production Contributed to Pooled Storage</div>
+  <div class="mom-value positive">{{ '{:,.2f}'.format(total_gallons_produced) }} gallons (25 L)</div>
+  <p class="small muted">Cumulative production from this farm. Oil is mixed in shared storage, so remaining stock and sales are not assigned to a farm. <a href="{{ url_for('storage.index') }}">View pooled storage</a>.</p>
   {% if pending_harvests %}
   <div class="alert alert-amber" style="margin-top:12px;">
     <span>⚠️</span>
     <div>
       <strong>{{ pending_harvests|length }} harvest{{ 's' if pending_harvests|length > 1 else '' }} missing gallons data.</strong>
-      Update these after processing to keep income accurate:
+      Update these after processing to keep storage accurate:
       <ul style="margin-top:8px;padding-left:16px;">
         {% for h in pending_harvests %}
         <li class="small">
@@ -193,7 +178,7 @@
       <div class="small muted mt-1">Last: GHS {{ '{:,.2f}'.format(last_m_income) }}</div>
       {% if mom_income_chg is not none %}
       <div class="small mt-1 {% if mom_income_chg >= 0 %}positive{% else %}negative{% endif %}">
-        {% if mom_income_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_income_chg|abs }}% vs last month
+        {% if mom_income_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_income_chg|abs }}% vs same elapsed period last month
       </div>
       {% endif %}
     </div>
@@ -204,17 +189,17 @@
       <div class="small muted mt-1">Last: GHS {{ '{:,.2f}'.format(last_m_exp) }}</div>
       {% if mom_exp_chg is not none %}
       <div class="small mt-1 {% if mom_exp_chg <= 0 %}positive{% else %}negative{% endif %}">
-        {% if mom_exp_chg > 0 %}▲{% else %}▼{% endif %} {{ mom_exp_chg|abs }}% vs last month
+        {% if mom_exp_chg > 0 %}▲{% else %}▼{% endif %} {{ mom_exp_chg|abs }}% vs same elapsed period last month
       </div>
       {% endif %}
     </div>
     <div class="mom-box">
-      <div class="small muted">Net Profit</div>
+      <div class="small muted">Farm Balance</div>
       <div class="mom-value {% if this_m_net >= 0 %}positive{% else %}negative{% endif %}">GHS {{ '{:,.2f}'.format(this_m_net) }}</div>
       <div class="small muted">This month</div>
       {% if mom_net_chg is not none %}
       <div class="small mt-1 {% if mom_net_chg >= 0 %}positive{% else %}negative{% endif %}">
-        {% if mom_net_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_net_chg|abs }}% vs last month
+        {% if mom_net_chg >= 0 %}▲{% else %}▼{% endif %} {{ mom_net_chg|abs }}% vs same elapsed period last month
       </div>
       {% endif %}
       {% if yoy_income_chg is not none %}
@@ -228,6 +213,7 @@
 {% if kpis %}
 <div class="card">
   <div class="card-title">📊 Financial Health KPIs</div>
+  <p class="small muted">Oil sales belong to the shared pool and are excluded from this farm’s income. Farm results include assigned processing charges and exclude any still awaiting allocation. The Finances page shows these expenses for the farms as a group.</p>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;">
     {% for kpi in kpis %}
     <div class="kpi-tile {{ kpi.status }}">
@@ -261,7 +247,7 @@
     <div class="chart-container"><canvas id="incExpChart"></canvas></div>
   </div>
   <div class="card">
-    <div class="card-title">📉 Monthly Net Profit Trend</div>
+    <div class="card-title">📉 Monthly Farm Balance Trend</div>
     <div class="chart-container"><canvas id="netChart"></canvas></div>
   </div>
 </div>
@@ -303,7 +289,7 @@
     <tbody>{% for h in harvests %}<tr>
       <td>{{ h['date'] }}</td>
       <td class="text-right mono bold">{{ h['bunches_harvested'] }}</td>
-      <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['harvesting_cost']) }}</td>
+      <td class="text-right mono">GHS {{ '{:,.2f}'.format((h['harvesting_cost'] or 0)+(h['threshing_cost'] or 0)) }}</td>
     </tr>{% endfor %}</tbody></table>
     {% else %}<p class="muted">No harvests yet.</p>{% endif %}
     <div class="mt-2 flex gap-2">
@@ -355,7 +341,7 @@
     new Chart(c3, {
       type: 'line',
       data: { labels: mc.map(function(d){return d.month;}), datasets: [{
-        label: 'Net Profit', data: mc.map(function(d){return d.net||0;}),
+        label: 'Farm Balance', data: mc.map(function(d){return d.net||0;}),
         borderColor: '#e9c46a', backgroundColor: 'rgba(233,196,106,0.1)',
         fill: true, tension: 0.35, pointRadius: 4,
         pointBackgroundColor: mc.map(function(d){return (d.net||0)>=0?"#e9c46a":"#e63946";})

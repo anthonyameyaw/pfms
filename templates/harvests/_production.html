@@ -1,0 +1,35 @@
+<div class="card">
+  <div class="card-title">🛢 Processing and Pooled Storage</div>
+  <p class="small muted">Record this farm's oil once after processing. Saving adds its production to pooled storage automatically. All oil sales are recorded in <a href="{{ url_for('storage.log_sale') }}">Storage → Log Sale</a>; sales are not attributed to individual farms.</p>
+  <div class="form-group">
+    <label for="husksProcessed">Have these bunches been processed?</label>
+    <select name="husks_processed" id="husksProcessed" onchange="onProcessedChange()">
+      <option value="0" {% if not production or not production['husks_processed'] %}selected{% endif %}>Not yet — update after processing</option>
+      <option value="1" {% if production and production['husks_processed'] %}selected{% endif %}>Yes — record oil produced</option>
+    </select>
+  </div>
+  <div id="gallonsCard" class="form-grid">
+    <div class="form-group">
+      <label for="gallons">Gallons produced (25 litres each)</label>
+      <input type="number" min="0.01" step="0.01" name="gallons_produced" id="gallons" value="{{ production['gallons_produced'] if production and production['gallons_produced'] else '' }}">
+    </div>
+    <div class="form-group">
+      <label for="processingDate">Date processed / added to storage</label>
+      <input type="date" name="processing_date" id="processingDate" value="{{ production['processing_date'] if production and production['processing_date'] else '' }}">
+    <span class="small muted">{% if production and production['processing_run_id'] %}From processing run #{{ production['processing_run_id'] }}; changes at the plant update this date.{% else %}Leave blank to use a unique matching plant run, or enter the date manually.{% endif %}</span>
+    </div>
+  </div>
+  <p id="notYetMsg" class="small muted">No oil enters stock until the processed quantity is entered.</p>
+</div>
+<script>
+function onProcessedChange() {
+  const yes=document.getElementById('husksProcessed').value==='1';
+  document.getElementById('gallonsCard').style.display=yes?'':'none';
+  document.getElementById('notYetMsg').style.display=yes?'none':'';
+  for (const id of ['gallons','processingDate']) {
+    document.getElementById(id).disabled=!yes;
+    document.getElementById(id).required=yes && id==='gallons';
+  }
+}
+onProcessedChange();
+</script>

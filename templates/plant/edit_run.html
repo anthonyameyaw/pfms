@@ -11,6 +11,7 @@
 </div>
 
 <form method="POST" id="runForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="card">
     <div class="card-title">📋 Run Date</div>
@@ -43,6 +44,7 @@
                value="{{ run['own_farms_bunches'] or '' }}" placeholder="e.g. 300">
       </div>
     </div>
+    {% include 'plant/_contributing_farms.html' %}
   </div>
 
   <!-- Section 2: Outside Farmers -->
@@ -71,8 +73,8 @@
       </div>
       <div class="form-group">
         <label>Outside Farmer Fees (GHS)</label>
-        <input type="number" step="0.01" name="outside_farmer_fees" id="outsideFees"
-               value="{{ run['outside_farmer_fees'] or '' }}" oninput="calcAll()" placeholder="GHS 40 × their gallons">
+        <input type="number" step="0.01" name="outside_farmer_fees" id="outsideFees" data-user-set="true"
+               value="{{ run['outside_farmer_fees'] or '' }}" oninput="this.dataset.userSet='true'; calcAll()" placeholder="GHS 40 × their gallons">
         <span class="small muted" style="margin-top:4px;display:block;" id="feeNote"></span>
       </div>
     </div>
@@ -95,7 +97,7 @@
       <div class="card-title" style="margin-bottom:10px;">💰 Gross Revenue (all plant income)</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
         <div>
-          <div class="small muted">Own Oil Revenue (× GHS 40)</div>
+          <div class="small muted">Own-Farm Processing Fees (× GHS 40)</div>
           <div class="mono bold positive" id="p_own_rev">—</div>
         </div>
         <div>
@@ -147,13 +149,14 @@
       <div class="form-group">
         <label>Cash Collected (GHS)</label>
         <input type="number" step="0.01" name="cash_collected" id="cashCollected"
-               value="{{ run['cash_collected'] or '' }}"
-               oninput="calcOutstanding()" placeholder="Amount received">
+               value="{{ run['cash_collected'] if run['cash_collected'] is not none else '' }}"
+               oninput="calcOutstanding()" placeholder="Blank = not recorded; 0 = nothing received">
       </div>
       <div class="form-group">
         <label>Cash Outstanding (Auto)</label>
-        <input type="number" id="cashOutstandingDisplay" disabled
+        <input type="text" id="cashOutstandingDisplay" disabled
                style="background:var(--surface-2);color:var(--red);font-weight:600;">
+        <p id="cashStatus" class="small muted" aria-live="polite"></p>
         <input type="hidden" name="cash_outstanding" id="cashOutstandingHidden"
                value="{{ run['cash_outstanding'] or 0 }}">
       </div>
@@ -180,7 +183,7 @@ function calcAll() {
   const ownGal  = parseFloat(document.getElementById('ownGallonsInput').value) || 0;
   const outGal  = parseFloat(document.getElementById('outGallonsInput').value) || 0;
   const totalGal = ownGal + outGal;
-  if (totalGal <= 0) return;
+
 
   const ownL   = ownGal  * 25;
   const outL   = outGal  * 25;
@@ -189,7 +192,7 @@ function calcAll() {
   document.getElementById('outLitresDisplay').value = outL.toFixed(1);
 
   const feesInput = document.getElementById('outsideFees');
-  if (!feesInput.dataset.userSet && outGal > 0)
+  if (!feesInput.dataset.userSet)
     feesInput.value = (outGal * 40).toFixed(2);
   document.getElementById('feeNote').textContent =
     outGal > 0 ? `Suggested: GHS 40 × ${outGal.toFixed(2)} gal = GHS ${(outGal*40).toFixed(2)}` : '';
@@ -218,16 +221,20 @@ function calcAll() {
 }
 
 function calcOutstanding() {
-  const collected   = parseFloat(document.getElementById('cashCollected').value) || 0;
-  const outstanding = Math.max(0, _gross - collected);
-  document.getElementById('totalBilled').value            = _gross.toFixed(2);
-  document.getElementById('cashOutstandingDisplay').value = outstanding.toFixed(2);
-  document.getElementById('cashOutstandingHidden').value  = outstanding.toFixed(2);
+  const text=document.getElementById('cashCollected').value.trim();
+  const collected=Number(text);
+  const billedCents=Math.round((_gross+Number.EPSILON)*100);
+  const collectedCents=Math.round((collected+Number.EPSILON)*100);
+  const unknown=text==='' || !Number.isFinite(collected);
+  const outstanding=Math.max(0,billedCents-collectedCents)/100;
+  const overpaid=Math.max(0,collectedCents-billedCents)/100;
+  document.getElementById('totalBilled').value=(billedCents/100).toFixed(2);
+  document.getElementById('cashOutstandingDisplay').value=unknown?'Not recorded':outstanding.toFixed(2);
+  document.getElementById('cashOutstandingHidden').value=unknown?'':outstanding.toFixed(2);
+  document.getElementById('cashStatus').textContent=unknown?'Enter 0 if nothing was collected; leave blank only when payment is unknown.':overpaid>0?'Excess collected: GHS '+overpaid.toFixed(2)+' (not applied to another run).':'';
 }
 
-document.getElementById('outsideFees').addEventListener('input', function() {
-  this.dataset.userSet = true; calcAll();
-});
+
 
 // Initialise on load
 calcAll();

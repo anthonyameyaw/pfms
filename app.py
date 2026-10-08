@@ -8,7 +8,7 @@ Run with:  python app.py
 Open:      http://localhost:5001
 """
 
-from flask import Flask
+from flask import Flask, render_template
 from database.db import init_db
 
 # ── Import all route blueprints ──────────────────────────────────────────────
@@ -27,7 +27,11 @@ from routes.investors  import investors_bp
 from routes.storage    import storage_bp
 
 app = Flask(__name__)
-app.secret_key = 'pfms-local-secret-2024'
+from database.security import configure_security
+configure_security(app)
+
+from database.validation import validate_submission
+app.before_request(validate_submission)
 
 # ── Register blueprints ──────────────────────────────────────────────────────
 app.register_blueprint(dashboard_bp)
@@ -48,6 +52,12 @@ app.register_blueprint(storage_bp,    url_prefix='/storage')
 with app.app_context():
     init_db()
 
+@app.route('/health')
+def health():
+    import hashlib
+    from pathlib import Path
+    return {'app':'PFMS','instance':hashlib.sha256(str(Path(__file__).resolve().parent).encode()).hexdigest()}
+
 @app.route('/offline')
 def offline():
     return render_template('offline.html')
@@ -57,4 +67,4 @@ if __name__ == '__main__':
     print("  🌴 Palm Farm Management System")
     print("  Open your browser: http://localhost:5001")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", debug=True, port=5001)
+    app.run(host="127.0.0.1", debug=False, use_reloader=False, port=5001)

@@ -1,52 +1,55 @@
+from database.periods import business_today, comparison_periods, shift_month
 """Processing Plant — runs, analytics, expenses, outside farmers."""
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from database.db import query, execute, get_all_farms
 from datetime import date, timedelta
+import math
+from decimal import Decimal
+from database.validation import money
+from database.processing import processing_transaction, parse_contributions, save_contributions
+from database.processing_dates import sync_dates
+from database.harvest_workflow import validate_stock
+from database.financials import financial_summary, monthly_financials, month_start_months_ago
 
 plant_bp = Blueprint('plant', __name__)
 EXPENSE_CATEGORIES = ['Maintenance', 'Casual Labour', 'Consumables', 'Other']
 
 
+def _cash_balance(gross, collected):
+    if collected is None:return None
+    return money(max(Decimal(0),Decimal(str(gross))-Decimal(str(collected))))
+
+
 def _calc_run(own_gallons, outside_gallons, outside_fees):
     """
     Input: gallons (user enters gallons; litres = gallons × 25).
-    Gross = own oil revenue + outside fees.
+    Gross = own-farm processing fees + outside processing fees.
     Electricity on total combined gallons.
     Net = gross - electricity. Split 70/30.
     """
-    own_lit     = own_gallons * 25.0
-    out_lit     = outside_gallons * 25.0
-    total_gal   = own_gallons + outside_gallons
-    total_lit   = total_gal * 25.0
-
-    own_oil_rev = own_gallons * 40.0
-    gross_rev   = own_oil_rev + outside_fees
-    electricity = (total_gal / 20.0) * 120.0
-    net_rev     = gross_rev - electricity
-    operator    = net_rev * 0.30
-    company     = net_rev * 0.70
-
+    own_gallons=Decimal(str(own_gallons));outside_gallons=Decimal(str(outside_gallons))
+    outside_fees=Decimal(str(outside_fees))
+    total_gal=own_gallons+outside_gallons
+    gross=own_gallons*40+outside_fees
+    electricity=total_gal*6
+    net=gross-electricity
+    operator=Decimal(str(money(net*Decimal('0.30'))))
     return dict(
-        own_farms_gallons       = round(own_gallons,  2),
-        own_farms_litres        = round(own_lit,      2),
-        outside_farmers_gallons = round(outside_gallons, 2),
-        outside_farmers_litres  = round(out_lit,      2),
-        total_output_gallons    = round(total_gal,    2),
-        total_output_litres     = round(total_lit,    2),
-        own_oil_revenue         = round(own_oil_rev,  2),
-        gross_revenue           = round(gross_rev,    2),
-        electricity_cost        = round(electricity,   2),
-        net_revenue             = round(net_rev,      2),
-        operator_pay            = round(operator,     2),
-        company_revenue         = round(company,      2),
-        outside_farmer_fees     = round(outside_fees,  2),
+        own_farms_gallons=money(own_gallons), own_farms_litres=money(own_gallons*25),
+        outside_farmers_gallons=money(outside_gallons), outside_farmers_litres=money(outside_gallons*25),
+        total_output_gallons=money(total_gal), total_output_litres=money(total_gal*25),
+        own_oil_revenue=money(own_gallons*40), gross_revenue=money(gross),
+        electricity_cost=money(electricity), net_revenue=money(net),
+        operator_pay=float(operator), company_revenue=money(net-operator),
+        outside_farmer_fees=money(outside_fees),
     )
 
 
 @plant_bp.route('/')
 def index():
-    today            = date.today()
+    today            = business_today()
+    periods = comparison_periods(today)
     this_month_start = today.replace(day=1).isoformat()
     last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1).isoformat()
     year_start       = today.replace(month=1, day=1).isoformat()
@@ -64,9 +67,15 @@ def index():
     sql += " ORDER BY date DESC"
     runs = query(sql, params)
 
+    def finances_for(from_d=None, to_d=None):
+        # Existing plant helper uses an exclusive end; shared reports use inclusive.
+        end = (date.fromisoformat(to_d)-timedelta(days=1)).isoformat() if to_d else (today.isoformat() if from_d else '')
+        return financial_summary(from_d or '', end, scope='plant')
+
     def totals(from_d=None, to_d=None):
-        w, p = _where(from_d, to_d)
-        return query(f"""
+        bounded_end = to_d or ((today+timedelta(days=1)).isoformat() if from_d else None)
+        w, p = _where(from_d, bounded_end)
+        row = dict(query(f"""
             SELECT
                 COALESCE(SUM(own_farms_litres),0)       AS own_litres,
                 COALESCE(SUM(outside_farmers_litres),0) AS out_litres,
@@ -84,16 +93,22 @@ def index():
                 COALESCE(SUM(outside_farmer_fees),0)    AS outside_farmer_fees,
                 COALESCE(SUM(cash_collected),0)         AS cash_collected,
                 COALESCE(SUM(cash_outstanding),0)       AS cash_outstanding,
+                SUM(CASE WHEN cash_collected IS NULL THEN 1 ELSE 0 END) AS unknown_cash_count,
+                COALESCE(SUM(CASE WHEN cash_collected IS NULL THEN gross_revenue ELSE 0 END),0) AS unknown_cash_billed,
+                COALESCE(SUM(MAX(0,COALESCE(cash_collected,0)-gross_revenue)),0) AS overpaid,
                 COUNT(*)                                AS run_count
             FROM processing_runs{w}
-        """, p, one=True)
+        """, p, one=True))
+        money = finances_for(from_d, to_d)
+        row.update(gross_revenue=money['total_income'], electricity_cost=money['elec_exp'],
+                   operator_pay=money['op_exp'])
+        return row
 
     def plant_other_exp(from_d=None, to_d=None):
-        w, p = _where(from_d, to_d)
-        return _sum(f"SELECT COALESCE(SUM(amount),0) FROM plant_expenses{w}", p)
+        return finances_for(from_d, to_d)['plant_other']
 
     def total_income_from(t):
-        # Gross revenue = all plant income (own oil sales + outside farmer fees)
+        # Gross revenue = all plant income (own-farm processing fees + outside farmer fees)
         return t['gross_revenue'] or 0
 
     def total_expenses_from(t, from_d=None, to_d=None):
@@ -104,7 +119,8 @@ def index():
     this_m = totals(this_month_start)
     last_m = totals(last_month_start, this_month_start)
     ytd_t  = totals(year_start)
-    prev_t = totals(prev_year_start, year_start)
+    prev_t = totals(periods['previous_year_start'], (date.fromisoformat(periods['previous_year_end'])+timedelta(days=1)).isoformat())
+    comparable = financial_summary(periods['previous_month_start'],periods['previous_month_end'],scope='plant')
 
     all_income    = total_income_from(all_t)
     all_expenses  = total_expenses_from(all_t)
@@ -120,9 +136,9 @@ def index():
     ytd_exp       = total_expenses_from(ytd_t, year_start)
     prior_income  = total_income_from(prev_t)
 
-    mom_income_chg = _pct_change(last_m_income, this_m_income)
-    mom_exp_chg    = _pct_change(last_m_exp, this_m_exp)
-    mom_net_chg    = _pct_change(last_m_net, this_m_net)
+    mom_income_chg = _pct_change(comparable['total_income'], this_m_income)
+    mom_exp_chg    = _pct_change(comparable['total_exp'], this_m_exp)
+    mom_net_chg    = _pct_change(comparable['net'], this_m_net)
     yoy_income_chg = _pct_change(prior_income, ytd_income)
 
     # Monthly chart
@@ -141,23 +157,24 @@ def index():
                SUM(outside_farmers_gallons) AS out_gallons,
                SUM(cash_collected)          AS cash_collected,
                SUM(cash_outstanding)        AS cash_outstanding,
+               SUM(CASE WHEN cash_collected IS NULL THEN 1 ELSE 0 END) AS unknown_cash_count,
                COUNT(*)                     AS run_count
         FROM processing_runs
-        WHERE date >= DATE('now','-18 months')
+        WHERE date >= ? AND date <= ?
         GROUP BY month ORDER BY month
-    """)
-    monthly_exp = query("""
-        SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total
-        FROM plant_expenses WHERE date >= DATE('now','-18 months')
-        GROUP BY month ORDER BY month
-    """)
-    exp_map = {r['month']: r['total'] for r in monthly_exp}
-
+    """, (month_start_months_ago(today,17),today.isoformat()))
     monthly_chart = []
-    for r in monthly_runs:
+    run_map = {r['month']: r for r in monthly_runs}
+    money_months = monthly_financials(month_start_months_ago(today, 17), today.isoformat(), scope='plant')
+    run_fields = ('own_gallons','gallons','own_litres','out_litres','litres','out_gallons',
+                  'gross_revenue','electricity_cost','company_revenue','outside_fees',
+                  'operator_pay','cash_collected','cash_outstanding','run_count','unknown_cash_count')
+    for money in money_months:
+        r = run_map.get(money['month'], dict.fromkeys(run_fields, 0))
+        r = dict(r, month=money['month'])
         m   = r['month']
-        inc = r['gross_revenue'] or 0
-        exp = (r['operator_pay'] or 0) + (r['electricity_cost'] or 0) + (exp_map.get(m) or 0)
+        inc = money['income']
+        exp = money['expenses']
         own_g   = round(r['own_gallons'] if r['own_gallons'] is not None else 0, 2)
         total_g = round(r['gallons']     if r['gallons']     is not None else 0, 2)
         monthly_chart.append({
@@ -176,10 +193,11 @@ def index():
             'income'          : round(inc, 2),
             'expenses'        : round(exp, 2),
             'net'             : round(inc - exp, 2),
-            'cash_collected'  : round(r['cash_collected'] or 0, 2),
-            'cash_outstanding': round(r['cash_outstanding'] or 0, 2),
+            'cash_collected'  : round(r['cash_collected'] or 0, 2) if not r['unknown_cash_count'] else None,
+            'cash_outstanding': round(r['cash_outstanding'] or 0, 2) if not r['unknown_cash_count'] else None,
             'run_count'       : r['run_count'] or 0,
-            'own_farm_pct'    : round((own_g / total_g * 100), 1) if total_g > 0 else 0,
+            'own_farm_pct'    : round((own_g / total_g * 100), 1) if total_g > 0 else None,
+            'outside_farm_pct': round((float(r['out_gallons'] or 0) / total_g * 100), 1) if total_g > 0 else None,
         })
 
     exp_by_cat = query("""
@@ -187,16 +205,13 @@ def index():
         FROM plant_expenses GROUP BY category ORDER BY total DESC
     """)
 
-    # Monthly own-farm % contribution
-    for m in monthly_chart:
-        total_g = m.get('gallons', 0) or 0
-        own_g   = m.get('own_gal', 0) or 0
-        m['own_farm_pct'] = round((own_g / total_g * 100), 1) if total_g > 0 else 0
+    first_record=query("SELECT MIN(date) day FROM (SELECT date FROM processing_runs UNION ALL SELECT date FROM plant_expenses)",one=True)['day']
+    monthly_chart=[m for m in monthly_chart if first_record and m['month']>=first_record[:7]]
 
     # All-time own farm %
     all_total_gal = float(all_t['total_gallons'] or 0)
     all_own_gal   = float(all_t['own_gallons'] or 0)
-    all_own_pct   = round((all_own_gal / all_total_gal * 100), 1) if all_total_gal > 0 else 0
+    all_own_pct   = round((all_own_gal / all_total_gal * 100), 1) if all_total_gal > 0 else None
 
     kpis, actions = _build_kpis_and_actions(
         all_income, all_expenses, all_net,
@@ -208,7 +223,15 @@ def index():
 
     other_expenses = query("SELECT COALESCE(SUM(amount),0) AS t FROM plant_expenses", one=True)
 
+    farm_contributions=[dict(row) for row in query("""SELECT f.name,
+        COALESCE(SUM(l.gallons_contributed),0) gallons FROM farms f
+        LEFT JOIN processing_run_farms l ON l.farm_id=f.id
+        WHERE f.crop_type='Oil Palm' GROUP BY f.id ORDER BY f.name""")]
+    for row in farm_contributions:
+        row['share']=round(row['gallons']/all_total_gal*100,2) if all_total_gal else None
+    unallocated_gallons=round(all_own_gal-sum(row['gallons'] for row in farm_contributions),2)
     return render_template('plant/index.html',
+        farm_contributions=farm_contributions, unallocated_gallons=unallocated_gallons,
         runs=runs, totals=all_t, other_expenses=other_expenses,
         filters=dict(date_from=date_from, date_to=date_to),
         all_own_pct=all_own_pct, all_own_gal=all_own_gal, all_total_gal=all_total_gal,
@@ -228,52 +251,60 @@ def index():
 def add_run():
     farms = get_all_farms()
     if request.method == 'POST':
-        own_gallons    = float(request.form.get('own_farms_gallons_input') or 0)
-        outside_gallons= float(request.form.get('outside_farmers_gallons_input') or 0)
-        outside_fees   = float(request.form.get('outside_farmer_fees') or 0)
-        own_bunches    = int(request.form.get('own_farms_bunches') or 0)
-        out_bunches    = int(request.form.get('outside_farmers_bunches') or 0)
+        try:
+            own_gallons    = float(request.form.get('own_farms_gallons_input') or 0)
+            outside_gallons= float(request.form.get('outside_farmers_gallons_input') or 0)
+            outside_fees   = float(request.form.get('outside_farmer_fees') or 0)
+            own_bunches    = int(request.form.get('own_farms_bunches') or 0)
+            out_bunches    = int(request.form.get('outside_farmers_bunches') or 0)
+            cash_text = request.form.get('cash_collected','').strip()
+            cash_collected = float(cash_text) if cash_text else None
+            values = (own_gallons, outside_gallons, outside_fees, cash_collected or 0)
+            if not all(math.isfinite(v) and v >= 0 for v in values) or min(own_bunches, out_bunches) < 0:
+                raise ValueError('Oil quantities, fees and bunch counts must be non-negative.')
+            contributions = parse_contributions(request.form, own_gallons, {f['id'] for f in get_all_farms()})
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
 
         c = _calc_run(own_gallons, outside_gallons, outside_fees)
 
-        cash_collected   = float(request.form.get('cash_collected') or 0)
         # Total billed = gross revenue (full factory income — what is owed to the plant)
         total_billed     = c['gross_revenue']
-        cash_outstanding = max(0, total_billed - cash_collected)
+        cash_outstanding = _cash_balance(total_billed, cash_collected)
 
-        run_id = execute("""
-            INSERT INTO processing_runs (
-                date,
-                own_farms_litres, own_farms_gallons, own_farms_bunches,
-                outside_farmers_litres, outside_farmers_gallons, outside_farmers_bunches,
-                total_output_litres, total_output_gallons,
-                gross_revenue, outside_farmer_fees,
-                electricity_cost, net_revenue,
-                operator_pay, company_revenue,
-                cash_collected, cash_outstanding,
-                notes
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            request.form['date'],
-            c['own_farms_litres'], c['own_farms_gallons'], own_bunches,
-            c['outside_farmers_litres'], c['outside_farmers_gallons'], out_bunches,
-            c['total_output_litres'], c['total_output_gallons'],
-            c['gross_revenue'], outside_fees,
-            c['electricity_cost'], c['net_revenue'],
-            c['operator_pay'], c['company_revenue'],
-            cash_collected, cash_outstanding,
-            request.form.get('notes', ''),
-        ))
+        try:
+            with processing_transaction() as conn:
+                run_id = conn.execute("""
+                    INSERT INTO processing_runs (
+                        date,
+                        own_farms_litres, own_farms_gallons, own_farms_bunches,
+                        outside_farmers_litres, outside_farmers_gallons, outside_farmers_bunches,
+                        total_output_litres, total_output_gallons,
+                        gross_revenue, outside_farmer_fees,
+                        electricity_cost, net_revenue,
+                        operator_pay, company_revenue,
+                        cash_collected, cash_outstanding,
+                        notes
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (
+                    request.form['date'],
+                    c['own_farms_litres'], c['own_farms_gallons'], own_bunches,
+                    c['outside_farmers_litres'], c['outside_farmers_gallons'], out_bunches,
+                    c['total_output_litres'], c['total_output_gallons'],
+                    c['gross_revenue'], outside_fees,
+                    c['electricity_cost'], c['net_revenue'],
+                    c['operator_pay'], c['company_revenue'],
+                    cash_collected, cash_outstanding,
+                    request.form.get('notes', ''),
+                )).lastrowid
+                save_contributions(conn, run_id, contributions)
+                sync_dates(conn)
+                validate_stock(conn)
 
-        # Link contributing own farms
-        farm_ids     = request.form.getlist('contributing_farm_ids')
-        farm_bunches = request.form.getlist('contributing_bunches')
-        for fid, bunches in zip(farm_ids, farm_bunches):
-            if fid and bunches:
-                execute("""
-                    INSERT INTO processing_run_farms (run_id, farm_id, bunches_contributed)
-                    VALUES (?,?,?)
-                """, (run_id, fid, bunches))
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
 
         flash('Processing run logged.', 'success')
         return redirect(url_for('plant.index'))
@@ -303,50 +334,78 @@ def edit_run(run_id):
         return redirect(url_for('plant.index'))
 
     if request.method == 'POST':
-        own_gallons    = float(request.form.get('own_farms_gallons_input') or 0)
-        outside_gallons= float(request.form.get('outside_farmers_gallons_input') or 0)
-        outside_fees   = float(request.form.get('outside_farmer_fees') or 0)
-        own_bunches    = int(request.form.get('own_farms_bunches') or 0)
-        out_bunches    = int(request.form.get('outside_farmers_bunches') or 0)
+        try:
+            own_gallons    = float(request.form.get('own_farms_gallons_input') or 0)
+            outside_gallons= float(request.form.get('outside_farmers_gallons_input') or 0)
+            outside_fees   = float(request.form.get('outside_farmer_fees') or 0)
+            own_bunches    = int(request.form.get('own_farms_bunches') or 0)
+            out_bunches    = int(request.form.get('outside_farmers_bunches') or 0)
+            cash_text = request.form.get('cash_collected','').strip()
+            cash_collected = float(cash_text) if cash_text else None
+            values = (own_gallons, outside_gallons, outside_fees, cash_collected or 0)
+            if not all(math.isfinite(v) and v >= 0 for v in values) or min(own_bunches, out_bunches) < 0:
+                raise ValueError('Oil quantities, fees and bunch counts must be non-negative.')
+            contributions = parse_contributions(request.form, own_gallons, {f['id'] for f in get_all_farms()})
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
 
         c = _calc_run(own_gallons, outside_gallons, outside_fees)
 
-        cash_collected   = float(request.form.get('cash_collected') or 0)
-        cash_outstanding = max(0, c['gross_revenue'] - cash_collected)
+        cash_outstanding = _cash_balance(c['gross_revenue'], cash_collected)
 
-        execute("""
-            UPDATE processing_runs SET
-                date=?,
-                own_farms_litres=?, own_farms_gallons=?, own_farms_bunches=?,
-                outside_farmers_litres=?, outside_farmers_gallons=?, outside_farmers_bunches=?,
-                total_output_litres=?, total_output_gallons=?,
-                gross_revenue=?, outside_farmer_fees=?,
-                electricity_cost=?, net_revenue=?,
-                operator_pay=?, company_revenue=?,
-                cash_collected=?, cash_outstanding=?,
-                notes=?
-            WHERE id=?
-        """, (
-            request.form['date'],
-            c['own_farms_litres'], c['own_farms_gallons'], own_bunches,
-            c['outside_farmers_litres'], c['outside_farmers_gallons'], out_bunches,
-            c['total_output_litres'], c['total_output_gallons'],
-            c['gross_revenue'], outside_fees,
-            c['electricity_cost'], c['net_revenue'],
-            c['operator_pay'], c['company_revenue'],
-            cash_collected, cash_outstanding,
-            request.form.get('notes', ''),
-            run_id,
-        ))
+        try:
+            with processing_transaction() as conn:
+                conn.execute("""
+                    UPDATE processing_runs SET
+                        date=?,
+                        own_farms_litres=?, own_farms_gallons=?, own_farms_bunches=?,
+                        outside_farmers_litres=?, outside_farmers_gallons=?, outside_farmers_bunches=?,
+                        total_output_litres=?, total_output_gallons=?,
+                        gross_revenue=?, outside_farmer_fees=?,
+                        electricity_cost=?, net_revenue=?,
+                        operator_pay=?, company_revenue=?,
+                        cash_collected=?, cash_outstanding=?,
+                        notes=?
+                    WHERE id=?
+                """, (
+                    request.form['date'],
+                    c['own_farms_litres'], c['own_farms_gallons'], own_bunches,
+                    c['outside_farmers_litres'], c['outside_farmers_gallons'], out_bunches,
+                    c['total_output_litres'], c['total_output_gallons'],
+                    c['gross_revenue'], outside_fees,
+                    c['electricity_cost'], c['net_revenue'],
+                    c['operator_pay'], c['company_revenue'],
+                    cash_collected, cash_outstanding,
+                    request.form.get('notes', ''),
+                    run_id,
+                ))
+                save_contributions(conn, run_id, contributions)
+                sync_dates(conn)
+                validate_stock(conn)
+
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return redirect(request.url)
+
         flash('Processing run updated.', 'success')
         return redirect(url_for('plant.index'))
 
-    return render_template('plant/edit_run.html', run=run)
+    contributing = query('SELECT * FROM processing_run_farms WHERE run_id=? ORDER BY id', (run_id,))
+    return render_template('plant/edit_run.html', run=run, farms=get_all_farms(), contributing=contributing)
 
 
 @plant_bp.route('/run/<int:run_id>/delete', methods=['POST'])
 def delete_run(run_id):
-    execute("DELETE FROM processing_runs WHERE id=?", (run_id,))
+    try:
+        with processing_transaction() as conn:
+            conn.execute('UPDATE harvests SET processing_date=NULL,processing_run_id=NULL WHERE processing_run_id=?',(run_id,))
+            conn.execute('DELETE FROM processing_runs WHERE id=?',(run_id,))
+            sync_dates(conn)
+            validate_stock(conn)
+    except ValueError as exc:
+        flash(str(exc),'error')
+        return redirect(url_for('plant.index'))
     flash('Processing run deleted.', 'success')
     return redirect(url_for('plant.index'))
 
@@ -439,16 +498,16 @@ def _build_kpis_and_actions(
     if all_income > 0:
         margin = (all_net / all_income) * 100
         kpis.append({'label': 'Profit Margin (All Time)', 'value': f'{margin:.1f}%',
-            'status': 'good' if margin >= 50 else 'warn' if margin >= 25 else 'bad',
-            'note': 'Target: ≥ 50%'})
-        if margin < 25:
+            'status': 'good' if margin >= 0 else 'bad',
+            'note': 'Recorded plant net ÷ gross processing income'})
+        if margin < 0:
             actions.append({'priority': 'high',
-                'action': f'Margin is {margin:.1f}%. Small batches raise cost per litre. Process larger volumes per run.'})
+                'action': f'Margin is {margin:.1f}%. Review recorded processing fees, electricity, operator pay and maintenance costs.'})
 
     if mom_income_chg is not None:
         kpis.append({'label': 'Income Growth (MoM)', 'value': f'{("+" if mom_income_chg>=0 else "")}{mom_income_chg}%',
             'status': 'good' if mom_income_chg >= 5 else 'warn' if mom_income_chg >= 0 else 'bad',
-            'note': 'This month vs last month'})
+            'note': 'Same elapsed period last month'})
         if mom_income_chg < -10:
             actions.append({'priority': 'high',
                 'action': f'Plant income fell {abs(mom_income_chg)}% this month. Check if fewer runs were done.'})
@@ -456,41 +515,41 @@ def _build_kpis_and_actions(
     if mom_exp_chg is not None:
         kpis.append({'label': 'Expense Change (MoM)', 'value': f'{("+" if mom_exp_chg>=0 else "")}{mom_exp_chg}%',
             'status': 'good' if mom_exp_chg <= 0 else 'warn' if mom_exp_chg <= 15 else 'bad',
-            'note': 'Lower is better'})
+            'note': 'Same elapsed period last month; compare with output'})
 
     if yoy_income_chg is not None:
         kpis.append({'label': 'YTD Income (YoY)', 'value': f'{("+" if yoy_income_chg>=0 else "")}{yoy_income_chg}%',
             'status': 'good' if yoy_income_chg >= 10 else 'warn' if yoy_income_chg >= 0 else 'bad',
-            'note': 'This year vs last year'})
+            'note': 'Same dates last year'})
 
     litres = totals['total_litres'] or 0
     elec   = totals['electricity_cost'] or 0
     if litres > 0:
         epl = elec / litres
         kpis.append({'label': 'Electricity Cost / Litre', 'value': f'GHS {epl:.2f}',
-            'status': 'good' if epl < 1.0 else 'warn' if epl < 2.0 else 'bad',
-            'note': 'Lower = more efficient runs'})
+            'status': 'warn',
+            'note': 'Recorded electricity ÷ litres; configured charge is GHS 6/gallon (GHS 0.24/litre)' })
         if epl > 2.0:
             actions.append({'priority': 'medium',
-                'action': 'Electricity cost per litre is high. Batch more FFB per run to spread the fixed cost.'})
+                'action': 'Recorded electricity differs substantially from the configured proportional charge. Check the entries.'})
 
     outside_fees = totals['outside_farmer_fees'] or 0
-    company_rev  = totals['company_revenue'] or 0
-    if company_rev > 0:
-        out_pct = (outside_fees / (company_rev + outside_fees)) * 100
+    if all_income > 0:
+        out_pct = (outside_fees / all_income) * 100
         kpis.append({'label': 'Outside Farmer Revenue', 'value': f'{out_pct:.1f}%',
-            'status': 'good' if out_pct >= 20 else 'warn',
-            'note': 'Share of total plant income'})
+            'status': 'warn',
+            'note': 'Outside processing fees ÷ gross processing revenue (all recorded dates)' })
 
     if len(monthly_chart) >= 3:
-        zero = [m for m in monthly_chart[-3:] if m['run_count'] == 0]
+        completed = [m for m in monthly_chart if m['month'] < business_today().strftime('%Y-%m')][-3:]
+        zero = [m for m in completed if m['run_count'] == 0]
         if zero:
             actions.append({'priority': 'high',
-                'action': f'{len(zero)} of the last 3 months had no runs logged. Check if runs are being recorded.'})
+                'action': f'{len(zero)} of the last 3 completed months had no runs logged. Check if runs are being recorded.'})
 
     if not actions:
         actions.append({'priority': 'good' if all_income > 0 else 'medium',
-            'action': 'No issues detected. Keep logging every run.' if all_income > 0
+            'action': 'No alerts from these recorded-data checks. Keep logging every run.' if all_income > 0
                       else 'No runs logged yet. Start recording to unlock analytics.'})
 
     return kpis, actions

@@ -1,0 +1,38 @@
+<div style="margin-top:16px;">
+  <div class="card-title">Contributing Farms</div>
+  <p class="small muted">This plant log allocates processing fees. Enter farm production in its harvest record to add oil to storage once.</p>
+  <p class="small muted">For one farm, select its name; all own-farm gallons and processing fees go to that farm. For multiple farms, enter each farm's gallons (25 litres each); the quantities must equal the own-farm total. Bunch counts are optional. Leave all rows blank only if the farm is not yet known.</p>
+  {% macro farm_row(row=none) %}
+  <div class="flex gap-2 mb-2 farm-contribution-row">
+    <div class="form-group" style="flex:1;margin:0;">
+      <label>Farm</label>
+      <select name="contributing_farm_ids" aria-label="Contributing farm">
+        <option value="">Select farm...</option>
+        {% for f in farms %}<option value="{{ f['id'] }}" {% if row and row['farm_id']==f['id'] %}selected{% endif %}>{{ f['name'] }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="flex:1;margin:0;">
+      <label>Gallons (25 L)</label>
+      <input type="number" min="0.01" step="0.01" name="contributing_gallons" aria-label="Gallons from this farm" value="{{ row['gallons_contributed'] if row and row['gallons_contributed'] is not none else '' }}" placeholder="Automatic for one farm">
+    </div>
+    <div class="form-group" style="flex:1;margin:0;">
+      <label>Bunches (optional)</label>
+      <input type="number" min="0" step="1" name="contributing_bunches" aria-label="Bunches from this farm" value="{{ row['bunches_contributed'] if row and row['bunches_contributed'] else '' }}">
+    </div>
+    <button type="button" class="btn btn-outline btn-sm remove-farm">Remove</button>
+  </div>
+  {% endmacro %}
+  <div id="farm-rows">
+    {% for row in contributing|default([]) %}{{ farm_row(row) }}{% else %}{{ farm_row() }}{% endfor %}
+  </div>
+  <template id="farm-row-template">{{ farm_row() }}</template>
+  <button type="button" id="add-farm-row" class="btn btn-outline btn-sm">+ Add farm</button>
+</div>
+<script>
+  document.getElementById('add-farm-row').addEventListener('click', function () {
+    document.getElementById('farm-rows').appendChild(document.getElementById('farm-row-template').content.cloneNode(true));
+  });
+  document.getElementById('farm-rows').addEventListener('click', function (event) {
+    if (event.target.classList.contains('remove-farm')) event.target.closest('.farm-contribution-row').remove();
+  });
+</script>

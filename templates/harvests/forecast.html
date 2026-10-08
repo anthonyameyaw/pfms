@@ -2,13 +2,14 @@
 {% block title %}Harvest Forecast{% endblock %}
 {% block page_title %}Harvest Forecast{% endblock %}
 {% block content %}
-<div class="page-header"><h2>Harvest Forecast</h2><p>Projections based on historical harvest patterns (last 12 months)</p></div>
+<div class="page-header"><h2>Harvest Forecast</h2><p>Simple monthly baseline based on the last 12 completed months: {{ period_start }} to {{ period_end }}. Current and future months are excluded. Each projected month uses the same historical average; seasonality and future changes are not modelled.</p></div>
 {% for fc in forecasts %}
 <div class="card">
   <div class="flex justify-between items-center mb-2">
     <strong style="font-size:1rem;">{{ fc['farm']['name'] }}</strong>
     <span class="badge badge-green">Avg: {{ fc['average'] }} bunches/month</span>
   </div>
+  <p class="small muted">{{ fc['unrecorded_months'] }} months have no recorded harvest. They contribute zero to this estimate but may indicate missing records. Verify your records before using the projection.</p>
   {% if fc['projected'] %}
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
     {% for p in fc['projected'] %}
@@ -20,7 +21,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="alert alert-amber">Not enough historical data to forecast. Log at least 2 harvests to generate projections.</div>
+  <div class="alert alert-amber">Not enough historical data to forecast. Log at least 2 harvests within this period to generate projections.</div>
   {% endif %}
 </div>
 {% endfor %}

@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}Log Sale{% endblock %}
+{% block page_title %}Storage{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('storage.index') }}">Storage</a>
+  <span class="breadcrumb-sep">›</span><span>Log Oil Sale</span>
+</div>
+<div class="page-header">
+  <div>
+    <h2>Log Oil Sale</h2>
+    <p>Sell from the shared pool without choosing a farm. Each gallon is 25 litres. Revenue uses the sale date.</p>
+  </div>
+</div>
+<div class="card" style="max-width:600px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">Current Stock</div>
+      <div class="kpi-tile-value">{{ '{:,.2f}'.format(total_stock) }} gal</div>
+    </div>
+    <div class="kpi-tile good">
+      <div class="kpi-tile-label">Current Price</div>
+      <div class="kpi-tile-value">GHS {{ '{:.2f}'.format(current_price) }}/gal</div>
+    </div>
+  </div>
+  <p class="small muted">Available: {{ '{:.2f}'.format(quality.Fresh) }} gallons fresh, {{ '{:.2f}'.format(quality.Soap) }} gallons for soap, {{ '{:.2f}'.format(quality.Unassessed) }} gallons not yet assessed. You can record food or soap sales before assessing the remaining stock. For a mixed sale, record each type separately.</p>
+  <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <div class="form-group"><label>Oil type</label>
+        <select name="quality_type" required>
+          <option value="" selected disabled>Select oil type</option>
+          <option value="Unassessed">Type not recorded (historical sale)</option>
+          <option value="Fresh">Oil for food</option>
+          <option value="Soap">Oil for soap</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date of Sale</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+      <div class="form-group">
+        <label>Buyer</label>
+        <input type="text" name="buyer" placeholder="e.g. Ama Boateng, Processing Plant">
+      </div>
+      <div class="form-group">
+        <label>Gallons Sold</label>
+        <input type="number" step="0.01" name="gallons" placeholder="e.g. 10" max="{{ total_stock }}" required oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>Price per Gallon (GHS)</label>
+        <input type="number" step="0.01" name="price_per_gallon" value="{{ current_price }}" required oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>Total Revenue (Auto)</label>
+        <input type="text" id="totalRev" disabled style="background:var(--surface);font-weight:600;color:var(--green-mid);">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="e.g. Sold to local buyer"></textarea>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">💾 Save Sale</button>
+      <a href="{{ url_for('storage.index') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function calcTotal() {
+  var g = parseFloat(document.querySelector('[name=gallons]').value) || 0;
+  var p = parseFloat(document.querySelector('[name=price_per_gallon]').value) || 0;
+  document.getElementById('totalRev').value = g && p ? 'GHS ' + (g*p).toLocaleString('en-GH',{minimumFractionDigits:2}) : '';
+}
+calcTotal();
+</script>
+{% endblock %}

@@ -1,9 +1,13 @@
+from database.periods import business_today
 """Reports & Export — CSV and PDF with date range and correct net profit."""
 
-import csv, io
+import csv, io, zipfile
+from decimal import Decimal
+from xml.sax.saxutils import escape
 from datetime import date
 from flask import Blueprint, render_template, request, Response, flash, redirect, url_for
 from database.db import query
+from database.financials import financial_summary, farm_financials
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -22,51 +26,11 @@ def _df(date_from, date_to):
 
 
 def _get_summary(date_from='', date_to=''):
-    """Correct consolidated financials for given period."""
-    dc, dp = _df(date_from, date_to)
-
-    farm_income  = _s(f"SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE gallons_sold_income>0{dc}", dp)
-    plant_income = _s(f"SELECT COALESCE(SUM(gross_revenue),0) FROM processing_runs WHERE 1=1{dc}", dp)
-    total_income = farm_income + plant_income
-
-    harv_exp  = _s(f"SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE 1=1{dc}", dp)
-    trans_exp = _s(f"SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE 1=1{dc}", dp)
-    act_exp   = _s(f"SELECT COALESCE(SUM(labour_cost+materials_cost),0) FROM activities WHERE activity_type!='Harvesting'{dc}", dp)
-    elec_exp  = _s(f"SELECT COALESCE(SUM(electricity_cost),0) FROM processing_runs WHERE 1=1{dc}", dp)
-    op_exp    = _s(f"SELECT COALESCE(SUM(operator_pay),0) FROM processing_runs WHERE 1=1{dc}", dp)
-    plant_other = _s(f"SELECT COALESCE(SUM(amount),0) FROM plant_expenses WHERE 1=1{dc}", dp)
-    total_exp = harv_exp + trans_exp + act_exp + elec_exp + op_exp + plant_other
-
-    return dict(
-        farm_income=farm_income, plant_income=plant_income,
-        total_income=total_income,
-        harv_exp=harv_exp, trans_exp=trans_exp, act_exp=act_exp,
-        elec_exp=elec_exp, op_exp=op_exp, plant_other=plant_other,
-        total_exp=total_exp,
-        net=total_income - total_exp,
-    )
+    return financial_summary(date_from, date_to)
 
 
 def _get_farm_pl(date_from='', date_to=''):
-    dc, dp = _df(date_from, date_to)
-    farms = query(f"""
-        SELECT f.id, f.name, f.status, f.crop_type, f.size_acres, f.location,
-               COALESCE((SELECT SUM(h.gallons_sold_income) FROM harvests h
-                          WHERE h.farm_id=f.id AND h.gallons_sold_income>0{dc}),0) AS income,
-               COALESCE((SELECT SUM(h.harvesting_cost) FROM harvests h WHERE h.farm_id=f.id{dc}),0) AS harv_cost,
-               COALESCE((SELECT SUM(t.total_cost) FROM transport_logs t WHERE t.farm_id=f.id{dc}),0) AS trans_cost,
-               COALESCE((SELECT SUM(a.labour_cost+a.materials_cost) FROM activities a
-                          WHERE a.farm_id=f.id AND a.activity_type!='Harvesting'{dc}),0) AS act_cost,
-               COALESCE((SELECT SUM(h.bunches_harvested) FROM harvests h WHERE h.farm_id=f.id{dc}),0) AS bunches,
-               COALESCE((SELECT SUM(h.gallons_produced) FROM harvests h
-                          WHERE h.farm_id=f.id AND h.gallons_produced>0{dc}),0) AS gallons
-        FROM farms f ORDER BY f.name
-    """, dp * 6)
-    result = []
-    for f in farms:
-        exp = f['harv_cost'] + f['trans_cost'] + f['act_cost']
-        result.append(dict(f, expenses=exp, net=f['income'] - exp))
-    return result
+    return farm_financials(date_from, date_to)
 
 
 @reports_bp.route('/')
@@ -76,27 +40,37 @@ def index():
     summary   = _get_summary(date_from, date_to)
     farms     = _get_farm_pl(date_from, date_to)
     return render_template('reports/index.html',
-        today=date.today(), summary=summary, farms=farms,
+        today=business_today(), summary=summary, farms=farms,
         date_from=date_from, date_to=date_to,
     )
 
 
 # ── CSV exports ───────────────────────────────────────────────────────────────
 
+@reports_bp.route('/export/financial-summary.csv')
+def export_financial_summary():
+    summary = financial_summary(request.args.get('date_from',''), request.args.get('date_to',''))
+    rows = [['Income', i['label'], Decimal(str(i['value'])).quantize(Decimal('0.01'))] for i in summary['income_items']]
+    rows += [['Expense', i['label'], Decimal(str(i['value'])).quantize(Decimal('0.01'))] for i in summary['expense_items']]
+    rows += [['Excluded internal transfer', 'Own-farm processing fees and matching farm expenses', Decimal(str(summary['internal_processing_fees'])).quantize(Decimal('0.01'))]]
+    rows += [['Total', 'Income', Decimal(str(summary['total_income'])).quantize(Decimal('0.01'))],
+             ['Total', 'Expenses', Decimal(str(summary['total_exp'])).quantize(Decimal('0.01'))],
+             ['Total', 'Net', Decimal(str(summary['net'])).quantize(Decimal('0.01'))]]
+    return _csv('financial_summary.csv', ['Type','Category','Amount (GHS)'], rows)
+
+
 @reports_bp.route('/export/harvests.csv')
 def export_harvests():
-    rows = query("""
-        SELECT f.name AS farm, h.date, h.bunches_harvested,
-               h.gallons_produced, h.gallons_sold, h.gallons_sold_income,
-               h.harvester_pay, h.collector_pay, h.harvesting_cost, h.notes
-        FROM harvests h JOIN farms f ON f.id=h.farm_id ORDER BY h.date DESC
-    """)
-    return _csv('harvests.csv',
-        ['Farm','Date','Bunches','Gallons Produced','Gallons Sold','Sale Income (GHS)',
-         'Harvester Pay','Collector Pay','Total Labour Cost','Notes'],
-        [[r['farm'],r['date'],r['bunches_harvested'],r['gallons_produced'],
-          r['gallons_sold'],r['gallons_sold_income'],
-          r['harvester_pay'],r['collector_pay'],r['harvesting_cost'],r['notes']] for r in rows])
+    rows = query("""SELECT h.*,f.name AS farm FROM harvests h JOIN farms f ON f.id=h.farm_id ORDER BY h.date DESC""")
+    return _csv('harvests.csv', ['Farm','Harvest Date','Bunches','Processed','Processing Date','Gallons Produced (25 L)','Harvest Labour (GHS)','Defruiting (GHS)','Total Labour (GHS)','Notes'],
+        [[r['farm'],r['date'],r['bunches_harvested'],r['husks_processed'],r['processing_date'],r['gallons_produced'],r['harvesting_cost'],r['threshing_cost'],(r['harvesting_cost'] or 0)+(r['threshing_cost'] or 0),r['notes']] for r in rows])
+
+
+@reports_bp.route('/export/storage.csv')
+def export_storage():
+    rows=query("SELECT * FROM storage_transactions WHERE transaction_type IN ('Purchase','Sale') ORDER BY date,id")
+    return _csv('pooled_storage.csv',['Date','Type','Oil Type','Gallons (25 L)','Price (GHS)','Amount (GHS)','Buyer','Seller','Notes'],
+        [[r['date'],r['transaction_type'],{'Fresh':'Oil for food','Soap':'Oil for soap','Unassessed':'Type not recorded'}[r['quality_type']],r['gallons'],r['price_per_gallon'],r['total_amount'],r['buyer'],r['seller'],r['notes']] for r in rows])
 
 
 @reports_bp.route('/export/activities.csv')
@@ -138,11 +112,40 @@ def export_plant():
           r['outside_farmer_fees'],r['cash_collected'],r['cash_outstanding']] for r in rows])
 
 
+def _safe_csv_cell(value):
+    # Only text is escaped; actual numeric values stay numeric, including negatives.
+    if isinstance(value,str) and value.lstrip().startswith(('=','+','-','@','\t','\r','\n')):
+        return "'"+value
+    return value
+
+@reports_bp.route('/export/all-records.zip')
+def export_all_records():
+    from database.db import get_connection
+    conn=get_connection()
+    out=io.BytesIO()
+    try:
+        conn.execute('BEGIN')
+        with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as archive:
+            tables=conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").fetchall()
+            for entry in tables:
+                name=entry['name']
+                quoted='"'+name.replace('"','""')+'"'
+                cursor=conn.execute('SELECT * FROM '+quoted)
+                text=io.StringIO();writer=csv.writer(text)
+                writer.writerow([c[0] for c in cursor.description])
+                writer.writerows([[_safe_csv_cell(v) for v in row] for row in cursor])
+                archive.writestr(name+'.csv',text.getvalue())
+            archive.writestr('README.txt','All recorded dates. One CSV per database table, including investors, repayments, pruning, processing links, and storage quality assessments. IDs preserve relationships. These are raw records, not additive financial totals: linked activity/harvest costs and legacy archive records may overlap. Use the financial summary for reconciled totals. Formula-leading text is prefixed with an apostrophe for spreadsheet safety. This export is not a restorable database backup.')
+    finally:
+        conn.close()
+    return Response(out.getvalue(),mimetype='application/zip',headers={'Content-Disposition':'attachment; filename="pfms_all_records.zip"'})
+
+
 def _csv(filename, headers, rows):
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(headers)
-    w.writerows(rows)
+    w.writerows([[_safe_csv_cell(cell) for cell in row] for row in rows])
     return Response(out.getvalue(), mimetype='text/csv',
         headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
@@ -161,8 +164,8 @@ def _pdf_styles():
     RED    = colors.HexColor('#c0392b')
     return dict(
         GREEN=GREEN, GOLD=GOLD, LGREY=LGREY, HLROW=HLROW, DKGREY=DKGREY, RED=RED,
-        s_title  = ParagraphStyle('T',  fontName='Helvetica-Bold', fontSize=20, textColor=GREEN, spaceAfter=4),
-        s_sub    = ParagraphStyle('S',  fontName='Helvetica',      fontSize=9,  textColor=DKGREY, spaceAfter=14),
+        s_title  = ParagraphStyle('T',  fontName='Helvetica-Bold', fontSize=20, leading=24, textColor=GREEN, spaceAfter=8),
+        s_sub    = ParagraphStyle('S',  fontName='Helvetica',      fontSize=9, leading=12, textColor=DKGREY, spaceAfter=14),
         s_h2     = ParagraphStyle('H2', fontName='Helvetica-Bold', fontSize=12, textColor=GREEN, spaceBefore=16, spaceAfter=6),
         s_small  = ParagraphStyle('Sm', fontName='Helvetica',      fontSize=8,  textColor=DKGREY),
         s_footer = ParagraphStyle('F',  fontName='Helvetica',      fontSize=8,  textColor=DKGREY, alignment=TA_CENTER),
@@ -231,16 +234,12 @@ def pdf_farm(farm_id):
         flash('Farm not found.', 'error')
         return redirect(url_for('reports.index'))
 
-    harvests   = query(f"SELECT date,bunches_harvested,gallons_produced,gallons_sold,gallons_sold_income,harvesting_cost FROM harvests WHERE farm_id=?{dc} ORDER BY date DESC", (farm_id,*dp))
+    harvests   = query(f"SELECT date,processing_date,bunches_harvested,gallons_produced,harvesting_cost,threshing_cost FROM harvests WHERE farm_id=?{dc} ORDER BY date DESC", (farm_id,*dp))
     transport  = query(f"SELECT date,transport_type,driver_pay,fuel_cost,rental_cost,total_cost FROM transport_logs WHERE farm_id=?{dc} ORDER BY date DESC", (farm_id,*dp))
     activities = query(f"SELECT date,activity_type,description,num_labourers,labour_cost,materials_cost FROM activities WHERE farm_id=? AND activity_type!='Harvesting'{dc} ORDER BY date DESC", (farm_id,*dp))
 
-    income     = _s(f"SELECT COALESCE(SUM(gallons_sold_income),0) FROM harvests WHERE farm_id=? AND gallons_sold_income>0{dc}", (farm_id,*dp))
-    harv_cost  = _s(f"SELECT COALESCE(SUM(harvesting_cost),0) FROM harvests WHERE farm_id=?{dc}", (farm_id,*dp))
-    trans_cost = _s(f"SELECT COALESCE(SUM(total_cost),0) FROM transport_logs WHERE farm_id=?{dc}", (farm_id,*dp))
-    act_cost   = _s(f"SELECT COALESCE(SUM(labour_cost+materials_cost),0) FROM activities WHERE farm_id=? AND activity_type!='Harvesting'{dc}", (farm_id,*dp))
-    total_exp  = harv_cost + trans_cost + act_cost
-    net        = income - total_exp
+    summary = financial_summary(date_from, date_to, farm_id)
+    income, total_exp, net = summary['total_income'], summary['total_exp'], summary['net']
 
     st   = _pdf_styles()
     buf  = io.BytesIO()
@@ -250,36 +249,34 @@ def pdf_farm(farm_id):
     story.append(Paragraph(farm['name'], st['s_title']))
     story.append(Paragraph(f"{farm['location']} · {farm['size_acres']} acres · {farm['crop_type']} · {farm['status']}", st['s_sub']))
     story.append(HRFlowable(width='100%', thickness=2, color=st['GOLD'], spaceAfter=10))
-    story.append(Paragraph(f"Period: {period} · Generated: {date.today().strftime('%d %B %Y')}", st['s_small']))
+    story.append(Paragraph(f"Period: {period} · Generated: {business_today().strftime('%d %B %Y')}", st['s_small']))
     story.append(Spacer(1, 12))
 
     story.append(Paragraph("Financial Summary", st['s_h2']))
-    summary_data = [
-        ['Item', 'Amount'],
-        ['Total Income (from sold gallons)', _money(income)],
-        ['', ''],
-        ['Harvesting Labour Cost', _money(harv_cost)],
-        ['Transport Cost',         _money(trans_cost)],
-        ['Activity Labour & Materials', _money(act_cost)],
-        ['Total Expenses',         _money(total_exp)],
-        ['NET PROFIT / LOSS',      _money(net)],
-    ]
+    story.append(Paragraph("All oil sales belong to the shared pool and are excluded from individual farm income. Individual farm results include assigned processing charges and exclude charges still awaiting allocation. See the Finances page for the farm-group expense.", st['s_small']))
+    summary_data = [['Item', 'Amount']]
+    summary_data += [[item['label'], _money(item['value'])] for item in summary['income_items'] if item['value']]
+    summary_data.append(['Total Income', _money(income)])
+    summary_data += [[item['label'], _money(item['value'])] for item in summary['expense_items'] if item['value']]
+    summary_data += [['Total Expenses', _money(total_exp)], ['NET INCOME / EXPENSE RESULT', _money(net)]]
     t = Table(summary_data, colWidths=[11*cm, 5*cm])
-    t.setStyle(_tbl_style(st, bold_rows=[6], net_rows=[7], net_positive=net>=0))
+    t.setStyle(_tbl_style(st, bold_rows=[len(summary_data)-2], net_rows=[len(summary_data)-1], net_positive=net>=0))
     story.append(t)
     story.append(Spacer(1, 6))
-    story.append(Paragraph(f"Net Profit = Total Income ({_money(income)}) − Total Expenses ({_money(total_exp)}) = {_money(net)}", st['s_small']))
+    story.append(Paragraph(f"Farm balance before pooled oil sales = Other Income ({_money(income)}) − Total Expenses ({_money(total_exp)}) = {_money(net)}", st['s_small']))
 
     if harvests:
         story.append(Paragraph("Harvest Records", st['s_h2']))
-        data = [['Date','Bunches','Gal. Produced','Gal. Sold','Sale Income','Labour Cost']]
+        data = [['Harvest Date','Processed Date','Bunches','Gallons','Labour*','Defruiting']]
         for r in harvests:
-            data.append([r['date'], r['bunches_harvested'] or 0,
-                         r['gallons_produced'] or 0, r['gallons_sold'] or 0,
-                         _money(r['gallons_sold_income']), _money(r['harvesting_cost'])])
-        t = Table(data, colWidths=[2.5*cm,2*cm,2.5*cm,2.5*cm,3*cm,3*cm])
+            data.append([r['date'], r['processing_date'] or 'Not recorded',r['bunches_harvested'] or 0,
+                         r['gallons_produced'] or 0, _money(r['harvesting_cost']),_money(r['threshing_cost'])])
+        t = Table(data, repeatRows=1, colWidths=[3*cm,3*cm,2*cm,2*cm,3*cm,3*cm])
         t.setStyle(_tbl_style(st))
         story.append(t)
+
+    if harvests:
+        story.append(Paragraph('*Labour excludes the separately shown defruiting cost.', st['s_small']))
 
     if transport:
         story.append(Paragraph("Transport Logs", st['s_h2']))
@@ -288,7 +285,7 @@ def pdf_farm(farm_id):
             data.append([r['date'],r['transport_type'],
                          _money(r['driver_pay']),_money(r['fuel_cost']),
                          _money(r['rental_cost']),_money(r['total_cost'])])
-        t = Table(data, colWidths=[2.5*cm,2.5*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
+        t = Table(data, repeatRows=1, colWidths=[2.5*cm,2.5*cm,2.5*cm,2.5*cm,2.5*cm,3*cm])
         t.setStyle(_tbl_style(st))
         story.append(t)
 
@@ -296,9 +293,9 @@ def pdf_farm(farm_id):
         story.append(Paragraph("Farm Activities", st['s_h2']))
         data = [['Date','Type','Description','Workers','Labour','Materials']]
         for r in activities:
-            data.append([r['date'],r['activity_type'],(r['description'] or '')[:35],
+            data.append([r['date'],r['activity_type'],Paragraph(escape(r['description'] or ''), st['s_small']),
                          r['num_labourers'] or 0,_money(r['labour_cost']),_money(r['materials_cost'])])
-        t = Table(data, colWidths=[2.2*cm,2.5*cm,4.3*cm,1.8*cm,2.5*cm,2.7*cm])
+        t = Table(data, repeatRows=1, colWidths=[2.2*cm,2.5*cm,4.3*cm,1.8*cm,2.5*cm,2.7*cm])
         t.setStyle(_tbl_style(st))
         story.append(t)
 
@@ -311,7 +308,7 @@ def pdf_farm(farm_id):
     buf.seek(0)
     fname = farm['name'].replace(' ','_')
     return Response(buf.read(), mimetype='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="{fname}_Report_{date.today()}.pdf"'})
+        headers={'Content-Disposition': f'attachment; filename="{fname}_Report_{business_today()}.pdf"'})
 
 
 # ── PDF: All farms consolidated ───────────────────────────────────────────────
@@ -336,33 +333,27 @@ def pdf_all_farms():
     story = []
 
     story.append(Paragraph("All Farms — Financial Report", st['s_title']))
-    story.append(Paragraph(f"Nkrankwanta, Dormaa West, Ghana · Period: {period} · Generated: {date.today().strftime('%d %B %Y')}", st['s_sub']))
+    story.append(Paragraph(f"Nkrankwanta, Dormaa West, Ghana · Period: {period} · Generated: {business_today().strftime('%d %B %Y')}", st['s_sub']))
     story.append(HRFlowable(width='100%', thickness=2, color=st['GOLD'], spaceAfter=12))
 
     # Consolidated summary
     story.append(Paragraph("Consolidated Financial Summary", st['s_h2']))
-    sd = [
-        ['Category', 'Amount'],
-        ['Farm Oil Sales Income',           _money(summary['farm_income'])],
-        ['Plant Processing Income',         _money(summary['plant_income'])],
-        ['TOTAL INCOME',                    _money(summary['total_income'])],
-        ['', ''],
-        ['Harvesting Labour',               _money(summary['harv_exp'])],
-        ['Transport Costs',                 _money(summary['trans_exp'])],
-        ['Activity Labour & Materials',     _money(summary['act_exp'])],
-        ['Plant Electricity',               _money(summary['elec_exp'])],
-        ['Plant Operator Pay (30%)',        _money(summary['op_exp'])],
-        ['Other Plant Expenses',            _money(summary['plant_other'])],
-        ['TOTAL EXPENSES',                  _money(summary['total_exp'])],
-        ['NET PROFIT / LOSS',               _money(summary['net'])],
-    ]
+    sd = [['Category', 'Amount']]
+    sd += [[item['label'], _money(item['value'])] for item in summary['income_items']]
+    sd.append(['TOTAL INCOME', _money(summary['total_income'])])
+    income_total_row = len(sd)-1
+    sd += [[item['label'], _money(item['value'])] for item in summary['expense_items']]
+    sd += [['TOTAL EXPENSES', _money(summary['total_exp'])],
+           ['NET INCOME / EXPENSE RESULT', _money(summary['net'])]]
     t = Table(sd, colWidths=[12*cm, 4*cm])
-    t.setStyle(_tbl_style(st, bold_rows=[3,11], net_rows=[12], net_positive=summary['net']>=0))
+    t.setStyle(_tbl_style(st, bold_rows=[income_total_row,len(sd)-2], net_rows=[len(sd)-1], net_positive=summary['net']>=0))
     story.append(t)
     story.append(Spacer(1, 6))
     story.append(Paragraph(
         f"Net Profit = Total Income ({_money(summary['total_income'])}) − Total Expenses ({_money(summary['total_exp'])}) = {_money(summary['net'])}",
         st['s_small']))
+
+    story.append(Paragraph(f"Internal processing fees of {_money(summary['internal_processing_fees'])} and matching farm charges are excluded from combined totals. All oil sales belong to the shared pool. Assigned charges are included in individual farm expenses. Any unassigned charges appear on the Finances page.", st['s_small']))
 
     # Other plant expenses breakdown
     plant_exp_rows = query(f"SELECT date, category, description, amount FROM plant_expenses WHERE 1=1{dc} ORDER BY date DESC", dp)
@@ -370,25 +361,21 @@ def pdf_all_farms():
         story.append(Paragraph("Other Plant Expenses Breakdown", st['s_h2']))
         data = [['Date', 'Category', 'Description', 'Amount']]
         for r in plant_exp_rows:
-            data.append([r['date'], r['category'] or '—', (r['description'] or '—')[:45], _money(r['amount'])])
+            data.append([r['date'], r['category'] or '—', Paragraph(escape(r['description'] or ''), st['s_small']), _money(r['amount'])])
         data.append(['', '', 'TOTAL', _money(summary['plant_other'])])
-        t = Table(data, colWidths=[2.5*cm, 3*cm, 8*cm, 2.5*cm])
+        t = Table(data, repeatRows=1, colWidths=[2.5*cm, 3*cm, 8*cm, 2.5*cm])
         t.setStyle(_tbl_style(st, net_rows=[len(data)-1], net_positive=True))
         story.append(t)
         story.append(Spacer(1, 8))
 
     # Per-farm table
     story.append(Paragraph("Per-Farm Performance", st['s_h2']))
-    data = [['Farm','Status','Income','Harv.Cost','Transport','Activity','Total Exp','NET']]
+    story.append(Paragraph('All amounts in GHS. Farm expenses include harvest and threshing labour, transport, activities and other recorded farm expenses. Pooled storage and shared expenses are included in the consolidated summary above.', st['s_small']))
+    data = [['Farm','Income','Total Expenses','Net']]
     for f in farms:
-        data.append([
-            f['name'].replace('Palm Farm ','').replace('Whitehouse','WH'),
-            f['status'],
-            _money(f['income']), _money(f['harv_cost']),
-            _money(f['trans_cost']), _money(f['act_cost']),
-            _money(f['expenses']), _money(f['net'])
-        ])
-    t = Table(data, colWidths=[3.2*cm,1.8*cm,2.5*cm,2*cm,1.8*cm,1.8*cm,2*cm,2.4*cm])
+        data.append([Paragraph(escape(f['name']), st['s_small']), _money(f['income']),
+                     _money(f['expenses']), _money(f['net'])])
+    t = Table(data, repeatRows=1, colWidths=[5*cm,3.6*cm,3.7*cm,3.7*cm])
     t.setStyle(_tbl_style(st))
     story.append(t)
 
@@ -400,7 +387,7 @@ def pdf_all_farms():
     doc.build(story)
     buf.seek(0)
     return Response(buf.read(), mimetype='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="All_Farms_Report_{date.today()}.pdf"'})
+        headers={'Content-Disposition': f'attachment; filename="All_Farms_Report_{business_today()}.pdf"'})
 
 
 # ── PDF: Processing plant ─────────────────────────────────────────────────────
@@ -425,16 +412,16 @@ def pdf_plant():
                COALESCE(SUM(outside_farmer_fees),0)  AS out_fees,
                COALESCE(SUM(total_output_gallons),0) AS gallons,
                COALESCE(SUM(cash_collected),0)       AS collected,
-               COALESCE(SUM(cash_outstanding),0)     AS outstanding
+               COALESCE(SUM(cash_outstanding),0)     AS outstanding,
+               SUM(CASE WHEN cash_collected IS NULL THEN 1 ELSE 0 END) AS unknown_cash_count,
+               COALESCE(SUM(MAX(0,COALESCE(cash_collected,0)-gross_revenue)),0) AS overpaid
         FROM processing_runs WHERE 1=1{dc}
     """, dp, one=True)
 
-    plant_other = _s(f"SELECT COALESCE(SUM(amount),0) FROM plant_expenses WHERE 1=1{dc}", dp)
-    gross       = float(totals['gross'] or 0)
-    elec        = float(totals['elec'] or 0)
-    op_pay      = float(totals['op_pay'] or 0)
-    total_exp   = elec + op_pay + plant_other
-    net         = gross - total_exp
+    summary = financial_summary(date_from, date_to, scope='plant')
+    plant_other = summary['plant_other']
+    gross, elec, op_pay = summary['total_income'], summary['elec_exp'], summary['op_exp']
+    total_exp, net = summary['total_exp'], summary['net']
 
     st   = _pdf_styles()
     buf  = io.BytesIO()
@@ -442,10 +429,11 @@ def pdf_plant():
     story = []
 
     story.append(Paragraph("Processing Plant — Financial Report", st['s_title']))
-    story.append(Paragraph(f"Nkrankwanta, Dormaa West · Period: {period} · Generated: {date.today().strftime('%d %B %Y')}", st['s_sub']))
+    story.append(Paragraph(f"Nkrankwanta, Dormaa West · Period: {period} · Generated: {business_today().strftime('%d %B %Y')}", st['s_sub']))
     story.append(HRFlowable(width='100%', thickness=2, color=st['GOLD'], spaceAfter=12))
 
     story.append(Paragraph("Financial Summary", st['s_h2']))
+    story.append(Paragraph("Plant revenue includes processing fees from both own farms and outside farmers.", st['s_small']))
     sd = [
         ['Item', 'Value'],
         ['Total Gallons Processed',    f"{float(totals['gallons'] or 0):,.1f} gal"],
@@ -457,8 +445,10 @@ def pdf_plant():
         ['TOTAL EXPENSES',             _money(total_exp)],
         ['NET PROFIT / LOSS',          _money(net)],
         ['', ''],
-        ['Cash Collected',             _money(totals['collected'])],
-        ['Cash Outstanding',           _money(totals['outstanding'])],
+        ['Known Cash Collected',       _money(totals['collected'])],
+        ['Known Cash Outstanding',     _money(totals['outstanding'])],
+        ['Runs with payment not recorded', str(totals['unknown_cash_count'] or 0)],
+        ['Excess collected (not allocated to other runs)', _money(totals['overpaid'])],
     ]
     t = Table(sd, colWidths=[10*cm, 6*cm])
     t.setStyle(_tbl_style(st, bold_rows=[2,7], net_rows=[8], net_positive=net>=0))
@@ -467,6 +457,8 @@ def pdf_plant():
     story.append(Paragraph(
         f"Net Profit = Gross Revenue ({_money(gross)}) − Total Expenses ({_money(total_exp)}) = {_money(net)}",
         st['s_small']))
+
+    story.append(Paragraph(f"Own-farm fees of {_money(summary['internal_processing_fees'])} are included in plant revenue above. The combined business excludes these fees and matching farm charges.", st['s_small']))
 
     # Other plant expenses breakdown table
     plant_exp_rows = query(f"SELECT date, category, description, amount FROM plant_expenses WHERE 1=1{dc} ORDER BY date DESC", dp)
@@ -482,7 +474,7 @@ def pdf_plant():
             ])
         # Totals row
         data.append(['', '', 'TOTAL', _money(plant_other)])
-        t = Table(data, colWidths=[2.5*cm, 3*cm, 7*cm, 3.5*cm])
+        t = Table(data, repeatRows=1, colWidths=[2.5*cm, 3*cm, 7*cm, 3.5*cm])
         ts = _tbl_style(st, net_rows=[len(data)-1], net_positive=True)
         t.setStyle(ts)
         story.append(t)
@@ -503,7 +495,7 @@ def pdf_plant():
                 _money(r['operator_pay']),
                 _money(row_net),
             ])
-        t = Table(data, colWidths=[2.2*cm,1.7*cm,1.7*cm,1.8*cm,2.5*cm,2.3*cm,2*cm,2.3*cm])
+        t = Table(data, repeatRows=1, colWidths=[2.2*cm,1.7*cm,1.7*cm,1.8*cm,2.5*cm,2.3*cm,2*cm,2.3*cm])
         t.setStyle(_tbl_style(st))
         story.append(t)
 
@@ -515,4 +507,4 @@ def pdf_plant():
     doc.build(story)
     buf.seek(0)
     return Response(buf.read(), mimetype='application/pdf',
-        headers={'Content-Disposition': f'attachment; filename="Plant_Report_{date.today()}.pdf"'})
+        headers={'Content-Disposition': f'attachment; filename="Plant_Report_{business_today()}.pdf"'})

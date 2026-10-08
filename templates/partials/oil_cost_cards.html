@@ -1,0 +1,4 @@
+<div class="stat-grid">
+{% for r in cost_cards.rows %}<div class="stat-card"><div class="stat-label">{{ r.name }} · average cost/gallon</div><div class="stat-value">{{ 'GHS {:,.2f}'.format(r.unit_cost) if r.unit_cost is not none else 'No output' }}</div><div class="stat-sub">GHS {{ '{:,.2f}'.format(r.cost) }} ÷ {{ r.gallons }} processed gallons</div></div>{% endfor %}
+<div class="stat-card gold"><div class="stat-label">All farms combined · cost/gallon</div><div class="stat-value">{{ 'GHS {:,.2f}'.format(cost_cards.unit_cost) if cost_cards.unit_cost is not none else 'No output' }}</div><div class="stat-sub">Total completed-harvest costs ÷ their total gallons.</div></div></div>
+<p class="small muted">Harvest costs only; pruning and general upkeep excluded. One gallon = 25 litres. {{ cost_period }}. <a href="{{ url_for('finances.oil_costs') }}">View cost breakdown and price planner</a>.</p>

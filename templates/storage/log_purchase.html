@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Log Purchase{% endblock %}
+{% block page_title %}Storage{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('storage.index') }}">Storage</a>
+  <span class="breadcrumb-sep">›</span><span>Log Oil Purchase</span>
+</div>
+<div class="page-header">
+  <div>
+    <h2>Log Oil Purchase</h2>
+    <p>Record gallons of palm oil bought and the price paid. This adds to your stock and is tracked as a cost.</p>
+  </div>
+</div>
+<div class="card" style="max-width:600px;">
+  <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <div class="form-group"><label>Oil type</label>
+        <select name="quality_type" required>
+          <option value="Unassessed">Not yet assessed</option>
+          <option value="Fresh">Fresh oil</option>
+          <option value="Soap">Oil for soap</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Date of Purchase</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+      <div class="form-group">
+        <label>Seller / Supplier</label>
+        <input type="text" name="seller" placeholder="e.g. Kofi Mensah, Local Market">
+      </div>
+      <div class="form-group">
+        <label>Gallons Purchased</label>
+        <input type="number" step="0.01" name="gallons" placeholder="e.g. 20" required oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>Price per Gallon (GHS)</label>
+        <input type="number" step="0.01" name="price_per_gallon" placeholder="e.g. 500" required oninput="calcTotal()">
+      </div>
+      <div class="form-group">
+        <label>Total Cost (Auto)</label>
+        <input type="text" id="totalCost" disabled style="background:var(--surface);font-weight:600;color:var(--red);">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <textarea name="notes" placeholder="e.g. Emergency purchase for processing run"></textarea>
+      </div>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-gold">💾 Save Purchase</button>
+      <a href="{{ url_for('storage.index') }}" class="btn btn-outline">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function calcTotal() {
+  var g = parseFloat(document.querySelector('[name=gallons]').value) || 0;
+  var p = parseFloat(document.querySelector('[name=price_per_gallon]').value) || 0;
+  document.getElementById('totalCost').value = g && p ? 'GHS ' + (g*p).toLocaleString('en-GH',{minimumFractionDigits:2}) : '';
+}
+</script>
+{% endblock %}

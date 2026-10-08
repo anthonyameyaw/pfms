@@ -45,7 +45,8 @@
     <td class="small muted">{{ p['unit'] or '—' }}</td>
     <td><span class="badge {% if p['negotiation_outcome']=='Accepted' %}badge-green{% elif p['negotiation_outcome']=='Rejected' %}badge-red{% else %}badge-amber{% endif %}">{{ p['negotiation_outcome'] }}</span></td>
     <td class="small muted">{{ p['notes'] or '—' }}</td>
-    <td><form method="POST" action="{{ url_for('prices.delete', price_id=p['id']) }}" data-confirm="Delete?"><button class="btn btn-sm btn-danger">Del</button></form></td>
+    <td><form method="POST" action="{{ url_for('prices.delete', price_id=p['id']) }}" data-confirm="Delete?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-danger">Del</button></form></td>
   </tr>
   {% else %}<tr><td colspan="9" class="text-center muted" style="padding:32px;">No price records yet.</td></tr>{% endfor %}
   </tbody>

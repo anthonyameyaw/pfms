@@ -11,6 +11,7 @@
 </div>
 
 <form method="POST" id="runForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <div class="card">
     <div class="card-title">📋 Run Date</div>
@@ -42,24 +43,7 @@
       </div>
     </div>
 
-    <!-- Contributing farms -->
-    <div style="margin-top:16px;">
-      <div class="card-title" style="margin-bottom:10px;">Contributing Farms (optional)</div>
-      <div id="farm-rows">
-        <div class="flex gap-2 mb-2">
-          <div class="form-group" style="flex:1;margin:0;">
-            <select name="contributing_farm_ids">
-              <option value="">Select farm...</option>
-              {% for f in farms %}<option value="{{ f['id'] }}">{{ f['name'] }}</option>{% endfor %}
-            </select>
-          </div>
-          <div class="form-group" style="width:160px;margin:0;">
-            <input type="number" name="contributing_bunches" placeholder="Bunches">
-          </div>
-        </div>
-      </div>
-      <button type="button" onclick="addFarmRow()" class="btn btn-outline btn-sm">+ Add farm</button>
-    </div>
+    {% include 'plant/_contributing_farms.html' %}
   </div>
 
   <!-- ── Section 2: Outside Farmers ──────────────────────────────────── -->
@@ -87,7 +71,7 @@
       <div class="form-group">
         <label>Outside Farmer Fees Collected (GHS)</label>
         <input type="number" step="0.01" name="outside_farmer_fees" id="outsideFees"
-               oninput="calcAll()" placeholder="Auto: GHS 40 × their gallons">
+               oninput="this.dataset.userSet='true'; calcAll()" placeholder="Auto: GHS 40 × their gallons">
         <span class="small muted" style="margin-top:4px;display:block;" id="feeNote"></span>
       </div>
     </div>
@@ -113,7 +97,7 @@
       <div class="card-title" style="margin-bottom:10px;">💰 Gross Revenue (all plant income)</div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
         <div>
-          <div class="small muted">Own Oil Revenue</div>
+          <div class="small muted">Own-Farm Processing Fees</div>
           <div class="small muted">(own gal × GHS 40)</div>
           <div class="mono bold positive" id="p_own_rev">—</div>
         </div>
@@ -173,12 +157,13 @@
       <div class="form-group">
         <label>Cash Collected (GHS)</label>
         <input type="number" step="0.01" name="cash_collected" id="cashCollected"
-               oninput="calcOutstanding()" placeholder="Amount received today">
+               oninput="calcOutstanding()" placeholder="Blank = not recorded; 0 = nothing received">
       </div>
       <div class="form-group">
         <label>Cash Outstanding (Auto)</label>
-        <input type="number" id="cashOutstandingDisplay" disabled
+        <input type="text" id="cashOutstandingDisplay" disabled
                style="background:var(--surface-2);color:var(--red);font-weight:600;">
+        <p id="cashStatus" class="small muted" aria-live="polite"></p>
         <input type="hidden" name="cash_outstanding" id="cashOutstandingHidden">
       </div>
     </div>
@@ -204,7 +189,7 @@ function calcAll() {
   const ownGal  = parseFloat(document.getElementById('ownGallonsInput').value)  || 0;
   const outGal  = parseFloat(document.getElementById('outGallonsInput').value)  || 0;
   const totalGal = ownGal + outGal;
-  if (totalGal <= 0) { document.getElementById('preview').style.display='none'; return; }
+
 
   const ownL   = ownGal  * 25;
   const outL   = outGal  * 25;
@@ -215,14 +200,14 @@ function calcAll() {
 
   // Auto-suggest outside fees if not manually set
   const feesInput = document.getElementById('outsideFees');
-  if (!feesInput.dataset.userSet && outGal > 0) {
+  if (!feesInput.dataset.userSet) {
     feesInput.value = (outGal * 40).toFixed(2);
   }
   document.getElementById('feeNote').textContent =
     outGal > 0 ? `Suggested: GHS 40 × ${outGal.toFixed(2)} gal = GHS ${(outGal*40).toFixed(2)}` : '';
 
   const fees    = parseFloat(feesInput.value) || 0;
-  const ownRev  = ownGal * 40;                    // own oil income
+  const ownRev  = ownGal * 40;                    // own-farm processing fees
   const gross   = ownRev + fees;                  // ALL plant income
   const elec    = (totalGal / 20) * 120;          // electricity on TOTAL volume
   const net     = gross - elec;
@@ -249,33 +234,21 @@ function calcAll() {
 }
 
 function calcOutstanding() {
-  // Total billed = gross revenue = all factory income (what the factory is owed)
-  const total     = _gross;
-  const collected = parseFloat(document.getElementById('cashCollected').value) || 0;
-  const outstanding = Math.max(0, total - collected);
-  document.getElementById('totalBilled').value           = total.toFixed(2);
-  document.getElementById('cashOutstandingDisplay').value= outstanding.toFixed(2);
-  document.getElementById('cashOutstandingHidden').value = outstanding.toFixed(2);
+  const text=document.getElementById('cashCollected').value.trim();
+  const collected=Number(text);
+  const billedCents=Math.round((_gross+Number.EPSILON)*100);
+  const collectedCents=Math.round((collected+Number.EPSILON)*100);
+  const unknown=text==='' || !Number.isFinite(collected);
+  const outstanding=Math.max(0,billedCents-collectedCents)/100;
+  const overpaid=Math.max(0,collectedCents-billedCents)/100;
+  document.getElementById('totalBilled').value=(billedCents/100).toFixed(2);
+  document.getElementById('cashOutstandingDisplay').value=unknown?'Not recorded':outstanding.toFixed(2);
+  document.getElementById('cashOutstandingHidden').value=unknown?'':outstanding.toFixed(2);
+  document.getElementById('cashStatus').textContent=unknown?'Enter 0 if nothing was collected; leave blank only when payment is unknown.':overpaid>0?'Excess collected: GHS '+overpaid.toFixed(2)+' (not applied to another run).':'';
 }
 
-document.getElementById('outsideFees').addEventListener('input', function() {
-  this.dataset.userSet = true; _fees = parseFloat(this.value)||0; calcOutstanding();
-});
 
-function addFarmRow() {
-  const div = document.createElement('div');
-  div.className = 'flex gap-2 mb-2';
-  div.innerHTML = `
-    <div class="form-group" style="flex:1;margin:0;">
-      <select name="contributing_farm_ids">
-        <option value="">Select farm...</option>
-        ${farmsJson.map(f=>`<option value="${f.id}">${f.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-group" style="width:160px;margin:0;">
-      <input type="number" name="contributing_bunches" placeholder="Bunches">
-    </div>`;
-  document.getElementById('farm-rows').appendChild(div);
-}
+
+calcAll();
 </script>
 {% endblock %}

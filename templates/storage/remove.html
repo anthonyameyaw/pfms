@@ -16,6 +16,7 @@
     <div>Current stock: <strong>{{ '{:,.1f}'.format(current_gallons) }} gallons</strong> available.</div>
   </div>
   <form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-grid">
       <div class="form-group">
         <label>Date</label>

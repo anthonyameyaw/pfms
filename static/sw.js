@@ -1,10 +1,9 @@
 // ── PFMS Service Worker ─────────────────────────────────────────────
-const CACHE     = 'pfms-v1';
+const CACHE     = 'pfms-v2-security';
 const OFFLINE_URL = '/offline';
 
 // Assets to cache immediately on install
 const PRECACHE = [
-  '/',
   '/offline',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
@@ -40,9 +39,11 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(e.request)
         .then(res => {
-          // Cache a copy of every page we successfully load
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
+          // Never cache pages containing session-specific forms or private records.
+          if (res.ok && !res.headers.get('Cache-Control')?.includes('no-store')) {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
           return res;
         })
         .catch(() =>
@@ -66,8 +67,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(e.request)
       .then(res => {
-        const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        if (res.ok && !res.headers.get('Cache-Control')?.includes('no-store')) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
         return res;
       })
       .catch(() => caches.match(e.request))

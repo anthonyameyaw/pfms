@@ -2,7 +2,7 @@
 {% block title %}{{ investor['name'] }}{% endblock %}
 {% block page_title %}Investors{% endblock %}
 
-{% block content %}
+{% block content %}{% include 'investors/_style.html' %}<div class="investor-ui">
 <div class="breadcrumb">
   <a href="{{ url_for('investors.index') }}">Investors</a>
   <span class="breadcrumb-sep">›</span>
@@ -19,134 +19,87 @@
     </p>
   </div>
   <div class="flex gap-2">
-    <a href="{{ url_for('investors.edit', investor_id=investor['id']) }}" class="btn btn-outline">Edit Profile</a>
+    <a href="{{ url_for('investors.add_investment', investor_id=investor['id']) }}" class="btn btn-primary">+ Log investment</a>
+    <a href="{{ url_for('investors.log_return', investor_id=investor['id']) }}" class="btn btn-gold">Log repayment</a>
   </div>
 </div>
 
-<!-- Financial summary -->
+<p class="small muted">Each investment below keeps its own principal, rate and due date.</p>
+<!-- Summary -->
 <div class="stat-grid">
   <div class="stat-card">
-    <div class="stat-label">Total Invested</div>
+    <div class="stat-label">Principal invested</div>
     <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_invested) }}</div>
-    <div class="stat-sub">Across {{ investments|length }} investment{{ 's' if investments|length != 1 else '' }}</div>
+    <div class="stat-sub">{{ investments|length }} investment{{ 's' if investments|length != 1 else '' }}</div>
   </div>
   <div class="stat-card gold">
-    <div class="stat-label">Total Returned</div>
-    <div class="stat-value serif">GHS {{ '{:,.2f}'.format(total_returned) }}</div>
-    <div class="stat-sub">{{ returns|length }} payment{{ 's' if returns|length != 1 else '' }} made</div>
+    <div class="stat-label">Total expected</div>
+    <div class="stat-value serif">GHS {{ '{:,.2f}'.format(total_expected) }}</div>
+    <div class="stat-sub">principal + interest</div>
   </div>
-  <div class="stat-card {% if outstanding > 0 %}red{% else %}gold{% endif %}">
+  <div class="stat-card">
+    <div class="stat-label">Paid Back</div>
+    <div class="stat-value positive">GHS {{ '{:,.2f}'.format(total_paid) }}</div>
+    <div class="stat-sub">{{ returns|length }} payment{{ 's' if returns|length != 1 else '' }}</div>
+  </div>
+  <div class="stat-card {% if total_outstanding > 0 %}red{% else %}gold{% endif %}">
     <div class="stat-label">Outstanding Balance</div>
-    <div class="stat-value {% if outstanding > 0 %}negative{% else %}positive{% endif %}">
-      GHS {{ '{:,.2f}'.format(outstanding) }}
+    <div class="stat-value {% if total_outstanding > 0 %}negative{% else %}positive{% endif %}">
+      GHS {{ '{:,.2f}'.format(total_outstanding) }}
     </div>
-    <div class="stat-sub">{% if outstanding <= 0 %}Fully settled ✓{% else %}Still owed{% endif %}</div>
-  </div>
-  <div class="stat-card {% if roi >= 0 %}gold{% else %}red{% endif %}">
-    <div class="stat-label">ROI</div>
-    <div class="stat-value serif">{{ roi }}%</div>
-    <div class="stat-sub">Return on investment</div>
+    <div class="stat-sub">{% if total_outstanding <= 0 %}Fully settled ✓{% else %}Still owed{% endif %}</div>
   </div>
 </div>
 
-<!-- Add Investment -->
-<div class="card">
-  <div class="card-title">💰 Record New Investment</div>
-  <form method="POST" action="{{ url_for('investors.add_investment', investor_id=investor['id']) }}">
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Date</label>
-        <input type="date" name="date" value="{{ today }}" required>
-      </div>
-      <div class="form-group">
-        <label>Amount (GHS)</label>
-        <input type="number" step="0.01" name="amount" placeholder="e.g. 5000" required>
-      </div>
-      <div class="form-group">
-        <label>Investment Type</label>
-        <select name="investment_type">
-          {% for t in investment_types %}
-          <option>{{ t }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Farm (optional)</label>
-        <select name="farm_id">
-          <option value="">All Farms / General</option>
-          {% for f in farms %}
-          <option value="{{ f['id'] }}">{{ f['name'] }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Equity % (optional)</label>
-        <input type="number" step="0.1" name="equity_pct" placeholder="e.g. 10">
-      </div>
-      <div class="form-group">
-        <label>Expected Return (GHS)</label>
-        <input type="number" step="0.01" name="expected_return" placeholder="e.g. 6000">
-      </div>
-      <div class="form-group">
-        <label>Expected Return Date</label>
-        <input type="date" name="return_date">
-      </div>
-      <div class="form-group">
-        <label>Status</label>
-        <select name="status">
-          {% for s in statuses %}
-          <option>{{ s }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>Notes</label>
-        <input name="notes" placeholder="e.g. Invested for farm expansion — Q1 2026">
-      </div>
-    </div>
-    <button type="submit" class="btn btn-primary mt-2">💾 Record Investment</button>
-  </form>
-</div>
-
+<div class="card"><div class="small muted">Expected interest</div><strong>GHS {{ '{:,.2f}'.format(total_expected-total_invested) }}</strong></div>
 <!-- Investments table -->
 {% if investments %}
 <div class="card">
-  <div class="card-title">📋 Investment Records</div>
+  <div class="card-title">Investment history · newest first</div>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>Date</th><th>Farm</th><th>Type</th>
-          <th class="text-right">Amount</th>
-          <th class="text-right">Equity %</th>
-          <th class="text-right">Expected Return</th>
-          <th>Return Date</th><th>Status</th><th></th>
+          <th class="text-right">Principal</th>
+          <th class="text-right">Return %</th>
+          <th class="text-right">Expected interest</th><th class="text-right">Total expected</th>
+          <th>Return Date</th>
+          <th class="text-right">Paid</th>
+          <th class="text-right">Outstanding</th>
+          <th>Status</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for inv in investments %}
-        <tr>
-          <td>{{ inv['date'] }}</td>
-          <td class="small">{{ inv['farm_name'] or 'All Farms' }}</td>
-          <td><span class="badge badge-grey">{{ inv['investment_type'] }}</span></td>
-          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(inv['amount']) }}</td>
-          <td class="text-right mono">{{ inv['equity_pct'] or 0 }}%</td>
-          <td class="text-right mono">{{ 'GHS {:,.2f}'.format(inv['expected_return']) if inv['expected_return'] else '—' }}</td>
-          <td class="small muted">{{ inv['return_date'] or '—' }}</td>
+        <tr {% if inv.is_overdue %}style="background:#fff5f5;"{% endif %}>
+          <td class="small">{{ inv.date }}<div class="muted">#{{ inv.id }}</div></td>
+          <td class="small muted">{{ inv.farm_name or 'General' }}</td>
+          <td><span class="badge badge-grey">{{ inv.investment_type }}</span></td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(inv.amount) }}</td>
+          <td class="text-right mono">{{ inv.return_pct }}%</td>
+          <td class="text-right mono">GHS {{ '{:,.2f}'.format(inv.interest) }}</td><td class="text-right mono bold">GHS {{ '{:,.2f}'.format(inv.expected) }}</td>
+          <td class="small {% if inv.is_overdue %}negative{% endif %}">
+            {{ inv.return_date or '—' }}
+            {% if inv.is_overdue %}<span class="badge badge-red" style="margin-left:4px;">Overdue</span>{% endif %}
+          </td>
+          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(inv.paid) }}</td>
+          <td class="text-right mono {% if inv.outstanding > 0 and inv.is_due %}negative{% elif inv.outstanding > 0 %}muted{% endif %}">
+            {% if inv.outstanding > 0 %}GHS {{ '{:,.2f}'.format(inv.outstanding) }}
+            {% else %}<span class="positive">✓ Settled</span>{% endif %}
+          </td>
           <td>
-            <span class="badge
-              {% if inv['status']=='Active' %}badge-green
-              {% elif inv['status']=='Settled' %}badge-grey
-              {% elif inv['status']=='Pending' %}badge-amber
-              {% else %}badge-red{% endif %}">
-              {{ inv['status'] }}
+            <span class="badge {% if inv.status=='Completed' %}badge-green{% elif inv.is_overdue %}badge-red{% else %}badge-amber{% endif %}">
+              {{ inv.status }}
             </span>
           </td>
           <td>
-            <div class="flex gap-2">
-              <a href="{{ url_for('investors.edit_investment', inv_id=inv['id']) }}" class="btn btn-sm btn-outline">Edit</a>
-              <form method="POST" action="{{ url_for('investors.delete_investment', inv_id=inv['id']) }}"
-                    data-confirm="Delete this investment record?">
+            <div class="flex gap-1">
+              <a href="{{ url_for('investors.edit_investment', inv_id=inv.id) }}" class="btn btn-sm btn-outline">Edit</a>
+              <form method="POST" action="{{ url_for('investors.delete_investment', inv_id=inv.id) }}"
+                    data-confirm="Delete this investment?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-sm btn-danger">Del</button>
               </form>
             </div>
@@ -159,67 +112,27 @@
 </div>
 {% endif %}
 
-<!-- Record return payment -->
-<div class="card">
-  <div class="card-title">💵 Record Return Payment</div>
-  <form method="POST" action="{{ url_for('investors.add_return', investor_id=investor['id']) }}">
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Date of Payment</label>
-        <input type="date" name="date" value="{{ today }}" required>
-      </div>
-      <div class="form-group">
-        <label>Amount Paid (GHS)</label>
-        <input type="number" step="0.01" name="amount" placeholder="e.g. 2000" required>
-      </div>
-      <div class="form-group">
-        <label>Against Investment (optional)</label>
-        <select name="investment_id">
-          <option value="">General payment</option>
-          {% for inv in investments %}
-          <option value="{{ inv['id'] }}">{{ inv['date'] }} — GHS {{ '{:,.0f}'.format(inv['amount']) }}
-            {% if inv['farm_name'] %}({{ inv['farm_name'] }}){% endif %}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Notes</label>
-        <input name="notes" placeholder="e.g. Quarterly return payment">
-      </div>
-    </div>
-    <button type="submit" class="btn btn-gold mt-2">💵 Record Payment</button>
-  </form>
-</div>
-
 <!-- Returns history -->
 {% if returns %}
 <div class="card">
-  <div class="card-title">📅 Return Payment History</div>
+  <div class="card-title">Repayment history</div>
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Date</th><th>Farm</th><th class="text-right">Amount Paid</th><th>Notes</th><th></th></tr>
+        <tr><th>Date paid</th><th>Investment</th><th class="text-right">Amount paid</th><th>Notes</th></tr>
       </thead>
       <tbody>
         {% for r in returns %}
         <tr>
-          <td>{{ r['date'] }}</td>
-          <td class="small muted">{{ r['farm_name'] or 'General' }}</td>
+          <td>{{ r['date'] }}</td><td>#{{ r['investment_id'] or '—' }}</td>
           <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(r['amount']) }}</td>
           <td class="small muted">{{ r['notes'] or '—' }}</td>
-          <td>
-            <form method="POST" action="{{ url_for('investors.delete_return', ret_id=r['id']) }}"
-                  data-confirm="Delete this return record?">
-              <button class="btn btn-sm btn-danger">Del</button>
-            </form>
-          </td>
         </tr>
         {% endfor %}
-        <tr style="background:var(--surface);font-weight:600;">
-          <td colspan="2">Total Returned</td>
-          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(total_returned) }}</td>
-          <td colspan="2"></td>
+        <tr style="background:var(--surface);font-weight:600;border-top:2px solid var(--border);">
+          <td colspan="2">Total repaid</td>
+          <td class="text-right mono positive">GHS {{ '{:,.2f}'.format(total_paid) }}</td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -233,4 +146,5 @@
   <p style="color:var(--ink-mid);">{{ investor['notes'] }}</p>
 </div>
 {% endif %}
+</div>
 {% endblock %}

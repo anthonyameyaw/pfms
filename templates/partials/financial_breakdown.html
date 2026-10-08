@@ -1,0 +1,22 @@
+<div class="card">
+  <div class="card-title">Income and Expense Breakdown</div>
+  <p class="small muted">Oil purchases are expensed in full on the purchase date and add to stock. Sales add revenue and reduce stock. Stock revaluations do not count as revenue.</p>
+  <p class="small muted">Own-farm processing fees of GHS {{ '{:,.2f}'.format(summary.internal_processing_fees) }} and matching farm charges are excluded from these combined totals. They remain revenue for the plant and expenses for the farms.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th class="text-right">GHS</th></tr></thead>
+      <tbody>
+        {% for item in summary.income_items %}
+        <tr><td>{{ item.label }}</td><td class="text-right mono">{{ '{:,.2f}'.format(item.value) }}</td></tr>
+        {% endfor %}
+        <tr class="bold"><td>Total Income</td><td class="text-right mono">{{ '{:,.2f}'.format(summary.total_income) }}</td></tr>
+        {% for item in summary.expense_items %}
+        <tr><td>{{ item.label }}</td><td class="text-right mono">{{ '{:,.2f}'.format(item.value) }}</td></tr>
+        {% endfor %}
+        <tr class="bold"><td>Total Expenses</td><td class="text-right mono">{{ '{:,.2f}'.format(summary.total_exp) }}</td></tr>
+        <tr class="bold"><td>Net Income / Expense Result</td><td class="text-right mono">{{ '{:,.2f}'.format(summary.net) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">All oil sales and purchases are pooled; producing oil adds inventory, not revenue. Pickup maintenance and transport without a farm are shared costs; they are included above without assigning them to a farm.</p>
+</div>

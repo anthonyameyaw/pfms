@@ -3,7 +3,7 @@
 {% block page_title %}Harvest Records{% endblock %}
 {% block content %}
 <div class="page-header">
-  <div><h2>Harvest Log</h2><p>Husks harvested per farm, with oil production and income</p></div>
+  <div><h2>Harvest Log</h2><p>Husks harvested per farm, with oil production contributed to pooled storage</p></div>
   <div class="flex gap-2">
     <a href="{{ url_for('harvests.forecast') }}" class="btn btn-gold">📊 Forecast</a>
     <a href="{{ url_for('harvests.add') }}" class="btn btn-primary">+ Log Harvest</a>
@@ -18,7 +18,7 @@
   <div class="stat-card">
     <div class="stat-label">{{ ft['name'] }}</div>
     <div class="stat-value serif">{{ '{:,}'.format(ft['total_bunches']|int) }}</div>
-    <div class="stat-sub">bunches total{% if ft['total_income'] > 0 %} · GHS {{ '{:,.2f}'.format(ft['total_income']) }} income{% endif %}</div>
+    <div class="stat-sub">bunches total · {{ '{:,.2f}'.format(ft['total_gallons']) }} gallons produced</div>
   </div>
   {% endif %}
   {% endfor %}
@@ -46,10 +46,9 @@
           <th>Date</th><th>Farm</th>
           <th class="text-right">Bunches</th>
           <th class="text-right">Harvester Pay</th>
-          <th class="text-right">Collector Pay</th>
+          <th class="text-right">Collector Pay</th><th class="text-right">Defruiting</th>
           <th class="text-right">Gallons</th>
-          <th class="text-right">Price/Gal</th>
-          <th class="text-right">Oil Income</th>
+          <th>Processing date</th><th>Status</th>
           <th>Transport</th>
           <th></th>
         </tr>
@@ -61,22 +60,23 @@
         <td style="font-weight:500;">{{ h['farm_name'] }}</td>
         <td class="text-right mono bold">{{ h['bunches_harvested'] }}</td>
         <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['harvester_pay'] or 0) }}</td>
-        <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['collector_pay'] or 0) }}</td>
+        <td class="text-right mono">GHS {{ '{:,.2f}'.format(h['collector_pay'] or 0) }}</td><td class="text-right mono">GHS {{ '{:,.2f}'.format(h['threshing_cost'] or 0) }}</td>
         <td class="text-right mono">{{ '{:,.1f}'.format(h['gallons_produced'] or 0) }}</td>
-        <td class="text-right mono">{% if h['price_per_gallon'] %}GHS {{ '{:,.2f}'.format(h['price_per_gallon']) }}{% else %}—{% endif %}</td>
-        <td class="text-right positive">{% if h['oil_income'] and h['oil_income'] > 0 %}GHS {{ '{:,.2f}'.format(h['oil_income']) }}{% else %}—{% endif %}</td>
+        <td>{{ h['processing_date'] or ('Not recorded' if h['husks_processed'] else '—') }}</td>
+        <td>{{ 'Added to pooled storage' if h['husks_processed'] else 'Awaiting processing' }}</td>
         <td class="small muted">{{ h['transport_mode'] or '—' }}</td>
         <td>
           <div class="flex gap-2">
             <a href="{{ url_for('harvests.edit', harvest_id=h['id']) }}" class="btn btn-sm btn-outline">Edit</a>
             <form method="POST" action="{{ url_for('harvests.delete', harvest_id=h['id']) }}" data-confirm="Delete this harvest record?">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-sm btn-danger">Del</button>
             </form>
           </div>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" class="text-center muted" style="padding:40px;">No harvest records yet.</td></tr>
+      <tr><td colspan="11" class="text-center muted" style="padding:40px;">No harvest records yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

@@ -11,6 +11,7 @@
 </div>
 
 <form method="POST" id="activityForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="card">
   <div class="card-title">📋 Basic Information</div>
   <div class="form-grid">
@@ -106,6 +107,7 @@
         <input type="number" step="0.01" name="collector_pay" id="collectorPay"
                oninput="updateTotalLabour()">
       </div>
+      {% with defruiting_cost = 0 %}{% include 'harvests/_defruiting.html' %}{% endwith %}
       <div class="form-group">
         <label>Total Labour Cost (Auto)</label>
         <input type="number" id="totalLabourDisplay" disabled
@@ -115,84 +117,9 @@
     </div>
   </div>
 
-  <!-- Step 1: Have the husks been processed? -->
-  <div class="card" id="processedCard">
-    <div class="card-title">🛢 Step 1 — Have the husks been processed into palm oil?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Husks Processed?</label>
-        <select name="husks_processed" id="husksProcessed" onchange="onProcessedChange()">
-          <option value="">— Select —</option>
-          <option value="1">Yes — gallons are known</option>
-          <option value="0">Not yet — I will update later</option>
-        </select>
-      </div>
-    </div>
+  {% set production = linked_harvest|default(none) %}
+  {% include 'harvests/_production.html' %}
 
-    <!-- Not yet: reminder message -->
-    <div id="notYetMsg" style="display:none;" class="alert alert-amber mt-2">
-      <span>⏰</span>
-      <div>No problem. This harvest will appear in your <strong>pending list</strong> on the farm dashboard. Come back to edit this activity after processing to enter the gallons.</div>
-    </div>
-  </div>
-
-  <!-- Step 2: Gallons produced (shown only if Yes) -->
-  <div class="card" id="gallonsCard" style="display:none;">
-    <div class="card-title">🛢 Step 2 — How many gallons were produced?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Gallons of Palm Oil Produced</label>
-        <input type="number" step="0.01" name="gallons_produced" id="gallons"
-               oninput="calcIncome(); onGallonsChange()" placeholder="e.g. 40" step="0.01">
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 3: Have the gallons been sold? (shown only if gallons entered) -->
-  <div class="card" id="soldCard" style="display:none;">
-    <div class="card-title">💰 Step 3 — Have these gallons been sold?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Gallons Sold?</label>
-        <select name="gallons_sold_yn" id="gallonsSoldYN" onchange="onSoldChange()">
-          <option value="">— Select —</option>
-          <option value="1">Yes — sold</option>
-          <option value="0">Not yet — in storage</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- Not sold yet -->
-    <div id="notSoldMsg" style="display:none;" class="alert alert-amber mt-2">
-      <span>🛢</span>
-      <div>Gallons will be tracked as <strong>unsold stock</strong> for this farm. Update when sold.</div>
-    </div>
-
-    <!-- Sold: enter details -->
-    <div id="soldDetails" style="display:none;">
-      <hr class="divider">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Number of Gallons Sold</label>
-          <input type="number" step="0.01" name="gallons_sold" id="gallonsSold"
-                 oninput="calcSaleIncome()" placeholder="e.g. 35" step="0.01">
-        </div>
-        <div class="form-group">
-          <label>Price per Gallon Sold (GHS)</label>
-          <input type="number" step="0.01" name="gallons_sold_price" id="gallonsSoldPrice"
-                 oninput="calcSaleIncome()" placeholder="e.g. 40">
-        </div>
-        <div class="form-group">
-          <label>Sale Income (Auto)</label>
-          <input type="number" id="saleIncomeDisplay" disabled
-                 style="background:var(--surface-2);color:var(--green);font-weight:600;">
-          <input type="hidden" name="gallons_sold_income" id="gallonsSoldIncomeHidden">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Transport — auto-set by farm -->
   <div class="card">
     <div class="card-title">🚛 Transport</div>
     <div class="alert alert-amber" id="transportAlert" style="margin-bottom:16px;">
@@ -280,9 +207,9 @@ function onFarmChange() {
   const alertText = document.getElementById('transportAlertText');
   const farmName  = FARM_NAMES[fid] || 'This farm';
   if (fid === PICKUP_FARM_ID) {
-    alertText.innerHTML = `<strong>${farmName}</strong> uses the <strong>Pickup Truck</strong>. Enter driver pay and fuel below.`;
+    alertText.textContent = `${farmName} uses the Pickup Truck. Enter driver pay and fuel below.`;
   } else {
-    alertText.innerHTML = `<strong>${farmName}</strong> uses the <strong>Tricycle (Aboboyaa)</strong>. Enter the rental fee below.`;
+    alertText.textContent = `${farmName} uses the Tricycle (Aboboyaa). Enter the rental fee below.`;
   }
   updateTransportFields();
 }
@@ -312,39 +239,9 @@ function syncLabourers() {
 function updateTotalLabour() {
   const h = parseFloat(document.getElementById('harvesterPay').value) || 0;
   const c = parseFloat(document.getElementById('collectorPay').value) || 0;
-  const total = h + c;
+  const total = h + c + (parseFloat(document.getElementById('threshingCost').value) || 0);
   document.getElementById('totalLabourDisplay').value = total.toFixed(2);
   document.getElementById('totalLabourHidden').value  = total.toFixed(2);
-}
-
-function onProcessedChange() {
-  const val = document.getElementById('husksProcessed').value;
-  document.getElementById('notYetMsg').style.display   = val === '0' ? '' : 'none';
-  document.getElementById('gallonsCard').style.display  = val === '1' ? '' : 'none';
-  document.getElementById('soldCard').style.display     = 'none';
-  document.getElementById('notSoldMsg').style.display   = 'none';
-  document.getElementById('soldDetails').style.display  = 'none';
-}
-
-function onGallonsChange() {
-  const g = parseFloat(document.getElementById('gallons').value) || 0;
-  document.getElementById('soldCard').style.display = g > 0 ? '' : 'none';
-}
-
-function onSoldChange() {
-  const val = document.getElementById('gallonsSoldYN').value;
-  document.getElementById('notSoldMsg').style.display  = val === '0' ? '' : 'none';
-  document.getElementById('soldDetails').style.display = val === '1' ? '' : 'none';
-}
-
-function calcIncome() {}  // kept for compatibility
-
-function calcSaleIncome() {
-  const gs = parseFloat(document.getElementById('gallonsSold').value) || 0;
-  const ps = parseFloat(document.getElementById('gallonsSoldPrice').value) || 0;
-  const income = gs * ps;
-  document.getElementById('saleIncomeDisplay').value       = income.toFixed(2);
-  document.getElementById('gallonsSoldIncomeHidden').value = income.toFixed(2);
 }
 
 document.getElementById('collectorPay').addEventListener('input', updateTotalLabour);

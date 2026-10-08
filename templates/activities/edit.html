@@ -6,7 +6,7 @@
 <div class="page-header">
   <div>
     <h2>Edit Activity</h2>
-    <p>All sections are editable. Change the activity type to reveal different fields.</p>
+    <p>Edit harvest production here; record pooled oil sales in Storage.</p>
   </div>
 </div>
 
@@ -14,6 +14,7 @@
 {% set h = linked_harvest %}
 
 <form method="POST" id="activityForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="card">
   <div class="card-title">📋 Basic Information</div>
   <div class="form-grid">
@@ -101,7 +102,7 @@
         <label>Harvester Pay (GHS) — GHS 3 × bunches</label>
         <input type="number" step="0.01" name="harvester_pay" id="harvesterPay"
                oninput="updateTotalLabour()" placeholder="Auto-calculated"
-               value="{{ '{:.2f}'.format(h['harvester_pay']) if h and h['harvester_pay'] else '' }}">
+               value="{{ '{:.2f}'.format(h['harvester_pay']) if h and h['harvester_pay'] is not none else '' }}">
         <span class="small muted" id="harvesterNote" style="margin-top:4px;display:block;"></span>
       </div>
       <div class="form-group">
@@ -116,6 +117,7 @@
                oninput="updateTotalLabour()"
                value="{{ '{:.2f}'.format(h['collector_pay']) if h and h['collector_pay'] else '' }}">
       </div>
+      {% with defruiting_cost = h['threshing_cost'] if h else 0 %}{% include 'harvests/_defruiting.html' %}{% endwith %}
       <div class="form-group">
         <label>Total Labour Cost (Auto)</label>
         <input type="number" id="totalLabourDisplay" disabled
@@ -125,83 +127,8 @@
     </div>
   </div>
 
-  <!-- Step 1: Husks processed? -->
-  <div class="card">
-    <div class="card-title">🛢 Step 1 — Have the husks been processed into palm oil?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Husks Processed?</label>
-        <select name="husks_processed" id="husksProcessed" onchange="onProcessedChange()">
-          <option value="">— Select —</option>
-          <option value="1" {% if h and h['husks_processed'] == 1 %}selected{% endif %}>Yes — gallons are known</option>
-          <option value="0" {% if h and h['husks_processed'] == 0 %}selected{% endif %}>Not yet — I will update later</option>
-        </select>
-      </div>
-    </div>
-    <div id="notYetMsg" style="display:none;" class="alert alert-amber mt-2">
-      <span>⏰</span>
-      <div>This harvest will appear in the pending list on the farm dashboard.</div>
-    </div>
-  </div>
-
-  <!-- Step 2: Gallons produced -->
-  <div class="card" id="gallonsCard" style="display:none;">
-    <div class="card-title">🛢 Step 2 — How many gallons were produced?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Gallons of Palm Oil Produced</label>
-        <input type="number" step="0.01" name="gallons_produced" id="gallons"
-               oninput="onGallonsChange()"
-               value="{{ h['gallons_produced'] if h and h['gallons_produced'] else '' }}"
-               placeholder="e.g. 40" step="0.01">
-      </div>
-    </div>
-  </div>
-
-  <!-- Step 3: Sold? -->
-  <div class="card" id="soldCard" style="display:none;">
-    <div class="card-title">💰 Step 3 — Have these gallons been sold?</div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Gallons Sold?</label>
-        <select name="gallons_sold_yn" id="gallonsSoldYN" onchange="onSoldChange()">
-          <option value="">— Select —</option>
-          <option value="1" {% if h and h['gallons_sold'] and h['gallons_sold'] > 0 %}selected{% endif %}>Yes — sold</option>
-          <option value="0" {% if h and (not h['gallons_sold'] or h['gallons_sold'] == 0) and h['husks_processed'] == 1 %}selected{% endif %}>Not yet — in storage</option>
-        </select>
-      </div>
-    </div>
-    <div id="notSoldMsg" style="display:none;" class="alert alert-amber mt-2">
-      <span>🛢</span><div>Gallons tracked as unsold stock for this farm.</div>
-    </div>
-    <div id="soldDetails" style="display:none;">
-      <hr class="divider">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Gallons Sold</label>
-          <input type="number" step="0.01" name="gallons_sold" id="gallonsSold"
-                 oninput="calcSaleIncome()"
-                 value="{{ h['gallons_sold'] if h and h['gallons_sold'] else '' }}"
-                 placeholder="e.g. 35" step="0.01">
-        </div>
-        <div class="form-group">
-          <label>Price per Gallon (GHS)</label>
-          <input type="number" step="0.01" name="gallons_sold_price" id="gallonsSoldPrice"
-                 oninput="calcSaleIncome()"
-                 value="{{ h['gallons_sold_price'] if h and h['gallons_sold_price'] else '' }}"
-                 placeholder="e.g. 40">
-        </div>
-        <div class="form-group">
-          <label>Sale Income (Auto)</label>
-          <input type="number" id="saleIncomeDisplay" disabled
-                 style="background:var(--surface-2);color:var(--green);font-weight:600;"
-                 value="{{ '{:.2f}'.format(h['gallons_sold_income']) if h and h['gallons_sold_income'] else '' }}">
-          <input type="hidden" name="gallons_sold_income" id="gallonsSoldIncomeHidden"
-                 value="{{ h['gallons_sold_income'] if h and h['gallons_sold_income'] else 0 }}">
-        </div>
-      </div>
-    </div>
-  </div>
+  {% set production = linked_harvest|default(none) %}
+  {% include 'harvests/_production.html' %}
 
   <div class="card">
     <div class="card-title">🚛 Transport</div>
@@ -272,7 +199,7 @@ function onActivityChange() {
   if (isHarvest) {
     onFarmChange();
     updateTotalLabour();
-    calcIncome();
+
   }
 }
 
@@ -285,9 +212,9 @@ function onFarmChange() {
   if (!sel.dataset.userChanged) sel.value = mode;
   const alertText = document.getElementById('transportAlertText');
   const name      = FARM_NAMES[fid] || 'This farm';
-  alertText.innerHTML = fid === PICKUP_FARM_ID
-    ? `<strong>${name}</strong> uses the <strong>Pickup Truck</strong>. Enter driver pay and fuel below.`
-    : `<strong>${name}</strong> uses the <strong>Tricycle (Aboboyaa)</strong>. Enter the rental fee below.`;
+  alertText.textContent = fid === PICKUP_FARM_ID
+    ? `${name} uses the Pickup Truck. Enter driver pay and fuel below.`
+    : `${name} uses the Tricycle (Aboboyaa). Enter the rental fee below.`;
   updateTransportFields();
 }
 
@@ -318,47 +245,20 @@ function syncLabourers() {
 function updateTotalLabour() {
   const h     = parseFloat(document.getElementById('harvesterPay').value) || 0;
   const c     = parseFloat(document.getElementById('collectorPay').value) || 0;
-  const total = h + c;
+  const total = h + c + (parseFloat(document.getElementById('threshingCost').value) || 0);
   document.getElementById('totalLabourDisplay').value = total.toFixed(2);
   document.getElementById('totalLabourHidden').value  = total.toFixed(2);
-}
-
-function onProcessedChange() {
-  const val = document.getElementById('husksProcessed').value;
-  document.getElementById('notYetMsg').style.display  = val === '0' ? '' : 'none';
-  document.getElementById('gallonsCard').style.display = val === '1' ? '' : 'none';
-  if (val !== '1') {
-    document.getElementById('soldCard').style.display = 'none';
-  } else {
-    onGallonsChange();
-  }
-}
-function onGallonsChange() {
-  const g = parseFloat(document.getElementById('gallons').value) || 0;
-  document.getElementById('soldCard').style.display = g > 0 ? '' : 'none';
-}
-function onSoldChange() {
-  const val = document.getElementById('gallonsSoldYN').value;
-  document.getElementById('notSoldMsg').style.display  = val === '0' ? '' : 'none';
-  document.getElementById('soldDetails').style.display = val === '1' ? '' : 'none';
-}
-function calcIncome() {}
-function calcSaleIncome() {
-  const gs = parseFloat(document.getElementById('gallonsSold').value) || 0;
-  const ps = parseFloat(document.getElementById('gallonsSoldPrice').value) || 0;
-  const income = gs * ps;
-  document.getElementById('saleIncomeDisplay').value       = income.toFixed(2);
-  document.getElementById('gallonsSoldIncomeHidden').value = income.toFixed(2);
 }
 
 document.getElementById('collectorPay').addEventListener('input', updateTotalLabour);
 document.getElementById('harvesterPay').addEventListener('input', updateTotalLabour);
 
+// Preserve saved transport when opening an existing harvest.
+document.getElementById('transportMode').dataset.userChanged = true;
 // Initialise
 onActivityChange();
 onFarmChange();
 // Restore oil section state
 if (document.getElementById('husksProcessed')) onProcessedChange();
-if (document.getElementById('gallonsSoldYN') && document.getElementById('gallonsSoldYN').value) onSoldChange();
 </script>
 {% endblock %}

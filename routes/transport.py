@@ -1,7 +1,7 @@
 """Transport — pickup trips, tricycle rentals, pickup maintenance."""
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from database.db import query, execute, get_all_farms
+from database.db import query, execute, get_all_farms, get_connection
 
 transport_bp = Blueprint('transport', __name__)
 
@@ -76,7 +76,20 @@ def add():
 
 @transport_bp.route('/<int:log_id>/delete', methods=['POST'])
 def delete(log_id):
-    execute("DELETE FROM transport_logs WHERE id=?", (log_id,))
+    conn = get_connection()
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        log = conn.execute('SELECT harvest_id FROM transport_logs WHERE id=?', (log_id,)).fetchone()
+        if log and log['harvest_id'] is not None:
+            conn.execute("""UPDATE harvests SET transport_mode='', driver_pay=0,
+                fuel_cost=0, tricycle_rent=0 WHERE id=?""", (log['harvest_id'],))
+        conn.execute('DELETE FROM transport_logs WHERE id=?', (log_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     flash('Transport log deleted.', 'success')
     return redirect(url_for('transport.index'))
 
